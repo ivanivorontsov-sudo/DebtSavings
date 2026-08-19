@@ -7,8 +7,11 @@ import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -28,15 +31,9 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
-data class Transaction(
-    val id: String,
-    val amount: Double,          // positive = income/savings, negative = expense/debt increase
-    val timestamp: Long,
-    val note: String = ""
-)
-
 class TransactionAdapter(
     private val items: MutableList<Transaction>,
+    private val credits: List<Credit>,
     private val onDelete: (Transaction) -> Unit
 ) : RecyclerView.Adapter<TransactionAdapter.VH>() {
 
@@ -70,9 +67,14 @@ class TransactionAdapter(
         )
         holder.date.text = dateFormat.format(Date(tx.timestamp))
 
-        if (tx.note.isNotBlank()) {
+        val creditName = tx.creditId?.let { id -> credits.find { it.id == id }?.name }
+        val noteParts = mutableListOf<String>()
+        if (tx.note.isNotBlank()) noteParts.add(tx.note)
+        if (creditName != null) noteParts.add("Кредит: $creditName")
+
+        if (noteParts.isNotEmpty()) {
             holder.note.visibility = View.VISIBLE
-            holder.note.text = tx.note
+            holder.note.text = noteParts.joinToString(" · ")
         } else {
             holder.note.visibility = View.GONE
         }
@@ -86,6 +88,7 @@ class TransactionAdapter(
 class MainActivity : AppCompatActivity() {
 
     private lateinit var editAmount: EditText
+    private lateinit var spinnerCredit: Spinner
     private lateinit var textBalance: TextView
     private lateinit var labelBalance: TextView
     private lateinit var textCreditInfo: TextView
@@ -95,21 +98,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnUndo: MaterialButton
 
     private val transactions = mutableListOf<Transaction>()
+    private val credits = mutableListOf<Credit>()
     private lateinit var adapter: TransactionAdapter
+
+    // Spinner: index 0 = "Без кредита", then credits
+    private var selectedCreditId: String? = null
 
     private val prefs by lazy { getSharedPreferences("debt_savings_prefs", Context.MODE_PRIVATE) }
     private val moneyFormat = NumberFormat.getNumberInstance(Locale("ru", "RU")).apply {
         maximumFractionDigits = 2
         minimumFractionDigits = 0
     }
-
-    // Credit settings
-    private var creditActive = false
-    private var creditRate = 0.0          // annual %
-    private var creditTermMonths = 0
-    private var creditMonthlyPayment = 0.0
-    private var creditPrincipal = 0.0     // тело долга
-    private var lastInterestDate = 0L     // day of last interest accrual
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -119,6 +118,7 @@ class MainActivity : AppCompatActivity() {
         setSupportActionBar(toolbar)
 
         editAmount = findViewById(R.id.editAmount)
+        spinnerCredit = findViewById(R.id.spinnerCredit)
         textBalance = findViewById(R.id.textBalance)
         labelBalance = findViewById(R.id.labelBalance)
         textCreditInfo = findViewById(R.id.textCreditInfo)
@@ -127,7 +127,7 @@ class MainActivity : AppCompatActivity() {
         emptyJournal = findViewById(R.id.emptyJournal)
         btnUndo = findViewById(R.id.btnUndo)
 
-        adapter = TransactionAdapter(transactions) { tx -> deleteTransaction(tx) }
+        adapter = TransactionAdapter(transactions, credits) { tx -> deleteTransaction(tx) }
         recycler.layoutManager = LinearLayoutManager(this)
         recycler.adapter = adapter
 
@@ -135,16 +135,27 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.btnMinus).setOnClickListener { applyAmount(positive = false) }
         btnUndo.setOnClickListener { undoLast() }
 
+        spinnerCredit.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                selectedCreditId = if (position == 0) null else credits.getOrNull(position - 1)?.id
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {
+                selectedCreditId = null
+            }
+        }
+
         loadAll()
         applyDailyInterestIfNeeded()
+        setupCreditSpinner()
         updateUI()
     }
 
     override fun onResume() {
         super.onResume()
-        // Reload credit settings in case they were changed in calculator
-        loadCreditSettings()
+        loadCredits()
         applyDailyInterestIfNeeded()
+        setupCreditSpinner()
+        adapter.notifyDataSetChanged()
         updateUI()
     }
 
@@ -161,6 +172,18 @@ class MainActivity : AppCompatActivity() {
         return super.onOptionsItemSelected(item)
     }
 
+    private fun setupCreditSpinner() {
+        val labels = mutableListOf("Без кредита (общий баланс)")
+        credits.forEach { labels.add(it.name) }
+        val spinAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
+        spinnerCredit.adapter = spinAdapter
+
+        // Restore selection if possible
+        val idx = if (selectedCreditId == null) 0
+        else credits.indexOfFirst { it.id == selectedCreditId }.let { if (it >= 0) it + 1 else 0 }
+        spinnerCredit.setSelection(idx.coerceIn(0, labels.size - 1))
+    }
+
     private fun applyAmount(positive: Boolean) {
         val text = editAmount.text.toString().trim().replace(',', '.')
         val value = text.toDoubleOrNull()
@@ -169,27 +192,35 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val signed = if (positive) value else -value
-        val note = if (positive) "Пополнение" else "Списание"
+        val creditId = selectedCreditId
+        val credit = creditId?.let { id -> credits.find { it.id == id } }
+
+        val note = when {
+            credit != null && positive -> "Платёж: ${credit.name}"
+            credit != null && !positive -> "Долг: ${credit.name}"
+            positive -> "Пополнение"
+            else -> "Списание"
+        }
 
         val tx = Transaction(
             id = UUID.randomUUID().toString(),
             amount = signed,
             timestamp = System.currentTimeMillis(),
-            note = note
+            note = note,
+            creditId = creditId
         )
         transactions.add(0, tx)
 
-        // If credit is active and we are reducing debt (positive amount while in debt),
-        // also reduce principal
-        if (creditActive && positive && getBalance() < 0) {
-            val reduce = minOf(value, creditPrincipal)
-            creditPrincipal = (creditPrincipal - reduce).coerceAtLeast(0.0)
-            saveCreditSettings()
-        }
-        // If increasing debt (minus), increase principal if credit active
-        if (creditActive && !positive) {
-            creditPrincipal += value
-            saveCreditSettings()
+        // Update principal of linked credit
+        if (credit != null) {
+            if (positive) {
+                // payment reduces principal
+                credit.principal = (credit.principal - value).coerceAtLeast(0.0)
+            } else {
+                // increase debt → increase principal
+                credit.principal += value
+            }
+            saveCredits()
         }
 
         adapter.notifyItemInserted(0)
@@ -206,19 +237,10 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val last = transactions.removeAt(0)
-        // Reverse effect on principal if credit active
-        if (creditActive) {
-            if (last.amount > 0) {
-                // was a payment / reduction → add back to principal
-                creditPrincipal += last.amount
-            } else {
-                // was an increase of debt → remove from principal
-                creditPrincipal = (creditPrincipal + last.amount).coerceAtLeast(0.0) // amount is negative
-            }
-            saveCreditSettings()
-        }
+        reversePrincipalEffect(last)
         adapter.notifyItemRemoved(0)
         saveTransactions()
+        saveCredits()
         updateUI()
         Toast.makeText(this, "Операция отменена", Toast.LENGTH_SHORT).show()
     }
@@ -226,26 +248,32 @@ class MainActivity : AppCompatActivity() {
     private fun deleteTransaction(tx: Transaction) {
         AlertDialog.Builder(this)
             .setTitle("Удалить операцию?")
-            .setMessage("Сумма будет пересчитана")
+            .setMessage("Сумма и тело кредита будут пересчитаны")
             .setPositiveButton("Удалить") { _, _ ->
                 val index = transactions.indexOfFirst { it.id == tx.id }
                 if (index >= 0) {
                     val removed = transactions.removeAt(index)
-                    if (creditActive) {
-                        if (removed.amount > 0) {
-                            creditPrincipal += removed.amount
-                        } else {
-                            creditPrincipal = (creditPrincipal + removed.amount).coerceAtLeast(0.0)
-                        }
-                        saveCreditSettings()
-                    }
+                    reversePrincipalEffect(removed)
                     adapter.notifyItemRemoved(index)
                     saveTransactions()
+                    saveCredits()
                     updateUI()
                 }
             }
             .setNegativeButton("Отмена", null)
             .show()
+    }
+
+    /** Reverse the effect of a transaction on its linked credit principal */
+    private fun reversePrincipalEffect(tx: Transaction) {
+        val credit = tx.creditId?.let { id -> credits.find { it.id == id } } ?: return
+        if (tx.amount > 0) {
+            // was a payment → add back to principal
+            credit.principal += tx.amount
+        } else {
+            // was debt increase → remove from principal
+            credit.principal = (credit.principal + tx.amount).coerceAtLeast(0.0)
+        }
     }
 
     private fun getBalance(): Double = transactions.sumOf { it.amount }
@@ -264,18 +292,19 @@ class MainActivity : AppCompatActivity() {
             textBalance.setTextColor(getColor(R.color.debt_red))
         }
 
-        // Credit info line
-        if (creditActive && creditPrincipal > 0) {
+        // Summary of all credits
+        if (credits.isNotEmpty()) {
             textCreditInfo.visibility = View.VISIBLE
-            val dailyRate = creditRate / 100.0 / 365.0
-            val dailyInterest = creditPrincipal * dailyRate
-            textCreditInfo.text = "Тело кредита: ${moneyFormat.format(creditPrincipal)} ₽  •  " +
-                    "% в день ≈ ${moneyFormat.format(dailyInterest)} ₽"
+            val totalPrincipal = credits.sumOf { it.principal }
+            val lines = credits.joinToString("\n") { c ->
+                val daily = c.principal * c.rate / 100.0 / 365.0
+                "${c.name}: ${moneyFormat.format(c.principal)} ₽ (≈${moneyFormat.format(daily)} ₽/день)"
+            }
+            textCreditInfo.text = "Кредиты (тело всего ${moneyFormat.format(totalPrincipal)} ₽):\n$lines"
         } else {
             textCreditInfo.visibility = View.GONE
         }
 
-        // Journal empty state
         if (transactions.isEmpty()) {
             emptyJournal.visibility = View.VISIBLE
             recycler.visibility = View.GONE
@@ -284,17 +313,11 @@ class MainActivity : AppCompatActivity() {
             recycler.visibility = View.VISIBLE
         }
 
-        // Bankruptcy banner
-        if (balance <= -500_000.0) {
-            warningBanner.visibility = View.VISIBLE
-        } else {
-            warningBanner.visibility = View.GONE
-        }
+        warningBanner.visibility = if (balance <= -500_000.0) View.VISIBLE else View.GONE
     }
 
     private fun checkBankruptcyWarning() {
-        val balance = getBalance()
-        if (balance <= -500_000.0) {
+        if (getBalance() <= -500_000.0) {
             AlertDialog.Builder(this)
                 .setTitle("⚠ Риск банкротства")
                 .setMessage(getString(R.string.bankruptcy_warning))
@@ -303,40 +326,48 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ---------- Daily interest ----------
+    // ---------- Daily interest (per credit) ----------
 
     private fun applyDailyInterestIfNeeded() {
-        if (!creditActive || creditPrincipal <= 0 || creditRate <= 0) return
-
         val today = startOfDay(System.currentTimeMillis())
-        if (lastInterestDate == 0L) {
-            lastInterestDate = today
-            saveCreditSettings()
-            return
+        var changed = false
+
+        for (credit in credits) {
+            if (credit.principal <= 0 || credit.rate <= 0) continue
+
+            if (credit.lastInterestDate == 0L) {
+                credit.lastInterestDate = today
+                changed = true
+                continue
+            }
+
+            val days = TimeUnit.MILLISECONDS.toDays(today - credit.lastInterestDate).toInt()
+            if (days <= 0) continue
+
+            val dailyRate = credit.rate / 100.0 / 365.0
+            val interest = credit.principal * dailyRate * days
+
+            if (interest > 0) {
+                val tx = Transaction(
+                    id = UUID.randomUUID().toString(),
+                    amount = -interest,
+                    timestamp = System.currentTimeMillis(),
+                    note = "%% ${credit.name} за $days дн.",
+                    creditId = credit.id
+                )
+                transactions.add(0, tx)
+                credit.principal += interest
+                changed = true
+            }
+            credit.lastInterestDate = today
+            changed = true
         }
 
-        val days = TimeUnit.MILLISECONDS.toDays(today - lastInterestDate).toInt()
-        if (days <= 0) return
-
-        val dailyRate = creditRate / 100.0 / 365.0
-        val interest = creditPrincipal * dailyRate * days
-
-        if (interest > 0) {
-            // Increase debt (negative transaction) and principal
-            val tx = Transaction(
-                id = UUID.randomUUID().toString(),
-                amount = -interest,
-                timestamp = System.currentTimeMillis(),
-                note = "Начисление %% за $days дн."
-            )
-            transactions.add(0, tx)
-            creditPrincipal += interest
-            adapter.notifyItemInserted(0)
+        if (changed) {
             saveTransactions()
+            saveCredits()
+            adapter.notifyDataSetChanged()
         }
-
-        lastInterestDate = today
-        saveCreditSettings()
     }
 
     private fun startOfDay(millis: Long): Long {
@@ -359,6 +390,7 @@ class MainActivity : AppCompatActivity() {
             o.put("amount", tx.amount)
             o.put("timestamp", tx.timestamp)
             o.put("note", tx.note)
+            if (tx.creditId != null) o.put("creditId", tx.creditId)
             arr.put(o)
         }
         prefs.edit().putString("transactions", arr.toString()).apply()
@@ -376,7 +408,8 @@ class MainActivity : AppCompatActivity() {
                         id = o.getString("id"),
                         amount = o.getDouble("amount"),
                         timestamp = o.getLong("timestamp"),
-                        note = o.optString("note", "")
+                        note = o.optString("note", ""),
+                        creditId = if (o.has("creditId")) o.getString("creditId") else null
                     )
                 )
             }
@@ -385,29 +418,75 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun saveCreditSettings() {
-        prefs.edit()
-            .putBoolean("credit_active", creditActive)
-            .putFloat("credit_rate", creditRate.toFloat())
-            .putInt("credit_term", creditTermMonths)
-            .putFloat("credit_payment", creditMonthlyPayment.toFloat())
-            .putFloat("credit_principal", creditPrincipal.toFloat())
-            .putLong("last_interest_date", lastInterestDate)
-            .apply()
+    private fun saveCredits() {
+        val arr = JSONArray()
+        credits.forEach { c ->
+            val o = JSONObject()
+            o.put("id", c.id)
+            o.put("name", c.name)
+            o.put("rate", c.rate)
+            o.put("termMonths", c.termMonths)
+            o.put("monthlyPayment", c.monthlyPayment)
+            o.put("principal", c.principal)
+            o.put("lastInterestDate", c.lastInterestDate)
+            arr.put(o)
+        }
+        prefs.edit().putString("credits", arr.toString()).apply()
     }
 
-    private fun loadCreditSettings() {
-        creditActive = prefs.getBoolean("credit_active", false)
-        creditRate = prefs.getFloat("credit_rate", 0f).toDouble()
-        creditTermMonths = prefs.getInt("credit_term", 0)
-        creditMonthlyPayment = prefs.getFloat("credit_payment", 0f).toDouble()
-        creditPrincipal = prefs.getFloat("credit_principal", 0f).toDouble()
-        lastInterestDate = prefs.getLong("last_interest_date", 0L)
+    private fun loadCredits() {
+        credits.clear()
+        val json = prefs.getString("credits", "[]") ?: "[]"
+        try {
+            val arr = JSONArray(json)
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                credits.add(
+                    Credit(
+                        id = o.getString("id"),
+                        name = o.getString("name"),
+                        rate = o.getDouble("rate"),
+                        termMonths = o.getInt("termMonths"),
+                        monthlyPayment = o.getDouble("monthlyPayment"),
+                        principal = o.getDouble("principal"),
+                        lastInterestDate = o.optLong("lastInterestDate", 0L)
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // Migrate old single-credit format if present
+        if (credits.isEmpty() && prefs.getBoolean("credit_active", false)) {
+            val old = Credit(
+                id = UUID.randomUUID().toString(),
+                name = "Основной кредит",
+                rate = prefs.getFloat("credit_rate", 0f).toDouble(),
+                termMonths = prefs.getInt("credit_term", 0),
+                monthlyPayment = prefs.getFloat("credit_payment", 0f).toDouble(),
+                principal = prefs.getFloat("credit_principal", 0f).toDouble(),
+                lastInterestDate = prefs.getLong("last_interest_date", 0L)
+            )
+            if (old.rate > 0) {
+                credits.add(old)
+                saveCredits()
+                // clear old keys
+                prefs.edit()
+                    .remove("credit_active")
+                    .remove("credit_rate")
+                    .remove("credit_term")
+                    .remove("credit_payment")
+                    .remove("credit_principal")
+                    .remove("last_interest_date")
+                    .apply()
+            }
+        }
     }
 
     private fun loadAll() {
         loadTransactions()
-        loadCreditSettings()
+        loadCredits()
         adapter.notifyDataSetChanged()
     }
 }
