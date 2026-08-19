@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Долг и накопления</string>
+    <string name="amount_hint">Сумма, ₽</string>
+    <string name="plus">+</string>
+    <string name="minus">−</string>
+    <string name="savings">Накопления</string>
+    <string name="debt">Долг</string>
+    <string name="journal">Журнал операций</string>
+    <string name="empty_journal">Пока нет операций</string>
+    <string name="undo">Отменить последнюю</string>
+    <string name="credit_calc">Калькулятор кредита</string>
+    <string name="bankruptcy_warning">Внимание! Долг превысил 500 000 ₽.\nВозможен риск банкротства.</string>
+    <string name="rate_hint">Ставка, % годовых</string>
+    <string name="term_hint">Срок, месяцев</string>
+    <string name="payment_hint">Ежемесячный платёж, ₽</string>
+    <string name="apply_credit">Применить настройки кредита</string>
+    <string name="clear_credit">Сбросить кредит</string>
+    <string name="make_payment">Внести платёж</string>
+</resources>

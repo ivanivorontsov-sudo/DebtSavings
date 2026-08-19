@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="background">#FFF8F6F4</color>
+    <color name="toolbar_background">#FFF8F6F4</color>
+    <color name="card_background">#FFFFFFFF</color>
+
+    <color name="text_primary">#FF1C1B1F</color>
+    <color name="text_secondary">#FF49454F</color>
+    <color name="text_tertiary">#FF79747E</color>
+
+    <color name="accent">#FF2E7D6F</color>
+    <color name="accent_dark">#FF1B5E54</color>
+
+    <color name="debt_red">#FFC62828</color>
+    <color name="savings_green">#FF2E7D32</color>
+    <color name="warning_orange">#FFE65100</color>
+
+    <color name="plus_bg">#FF2E7D6F</color>
+    <color name="minus_bg">#FFC62828</color>
+
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>
