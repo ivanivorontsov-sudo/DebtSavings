@@ -52,12 +52,13 @@ class CreditListAdapter(
     override fun onBindViewHolder(holder: VH, position: Int) {
         val c = items[position]
         holder.name.text = c.name
-        holder.details.text = "${c.rate} % · ${c.termMonths} мес. · платёж ${moneyFormat.format(c.monthlyPayment)} ₽"
-        holder.principal.text = "Тело: ${moneyFormat.format(c.principal)} ₽"
+        holder.details.text = "${c.rate} % годовых · ${c.termMonths} мес. · платёж ${moneyFormat.format(c.monthlyPayment)} ₽"
 
         val daily = c.principal * c.rate / 100.0 / 365.0
-        if (c.principal > 0 && c.rate > 0) {
-            holder.principal.text = "Тело: ${moneyFormat.format(c.principal)} ₽  ·  ≈${moneyFormat.format(daily)} ₽/день"
+        holder.principal.text = if (c.principal > 0 && c.rate > 0) {
+            "Тело: ${moneyFormat.format(c.principal)} ₽ · ≈${moneyFormat.format(daily)} ₽/день"
+        } else {
+            "Тело: ${moneyFormat.format(c.principal)} ₽"
         }
 
         holder.btnPay.setOnClickListener { onPay(c) }
@@ -138,9 +139,7 @@ class CreditCalculatorActivity : AppCompatActivity() {
             val monthlyRate = rate / 100.0 / 12.0
             val n = term.toDouble()
             val factor = (1 + monthlyRate).pow(n)
-            val estPrincipal = if (monthlyRate > 0) {
-                payment * (factor - 1) / (monthlyRate * factor)
-            } else payment * n
+            val estPrincipal = payment * (factor - 1) / (monthlyRate * factor)
             val totalPaid = payment * n
             val over = totalPaid - estPrincipal
             textCalc.text = "Ориентир. тело по платежу: ${moneyFormat.format(estPrincipal)} ₽\n" +
@@ -178,6 +177,11 @@ class CreditCalculatorActivity : AppCompatActivity() {
                         lastInterestDate = System.currentTimeMillis()
                     )
                     credits.add(0, c)
+                    addTransaction(
+                        amount = -principal,
+                        note = "Получен кредит: $name (тело долга)",
+                        creditId = c.id
+                    )
                     adapter.notifyItemInserted(0)
                 } else {
                     existing.name = name
@@ -190,7 +194,7 @@ class CreditCalculatorActivity : AppCompatActivity() {
                 }
                 saveCredits()
                 updateEmpty()
-                Toast.makeText(this, "Сохранено", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Сохранено. Тело долга добавлено в общий баланс", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Отмена", null)
             .show()
@@ -218,13 +222,11 @@ class CreditCalculatorActivity : AppCompatActivity() {
                 }
                 val reduce = minOf(amount, credit.principal)
                 credit.principal = (credit.principal - reduce).coerceAtLeast(0.0)
-
-                // Add transaction to journal
-                addTransaction(amount, "Платёж: ${credit.name}", credit.id)
+                addTransaction(reduce, "Платёж: ${credit.name}", credit.id)
                 saveCredits()
                 val idx = credits.indexOfFirst { it.id == credit.id }
                 if (idx >= 0) adapter.notifyItemChanged(idx)
-                Toast.makeText(this, "Платёж ${moneyFormat.format(amount)} ₽ внесён", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Платёж ${moneyFormat.format(reduce)} ₽ внесён", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Отмена", null)
             .show()
