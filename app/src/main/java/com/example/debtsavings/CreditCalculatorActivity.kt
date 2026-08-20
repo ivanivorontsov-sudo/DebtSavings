@@ -29,12 +29,10 @@ class CreditListAdapter(
     private val onDelete: (Credit) -> Unit,
     private val onPay: (Credit) -> Unit
 ) : RecyclerView.Adapter<CreditListAdapter.VH>() {
-
     private val moneyFormat = NumberFormat.getNumberInstance(Locale("ru", "RU")).apply {
         maximumFractionDigits = 2
         minimumFractionDigits = 0
     }
-
     class VH(v: View) : RecyclerView.ViewHolder(v) {
         val name: TextView = v.findViewById(R.id.creditName)
         val details: TextView = v.findViewById(R.id.creditDetails)
@@ -43,39 +41,28 @@ class CreditListAdapter(
         val btnEdit: ImageButton = v.findViewById(R.id.btnEditCredit)
         val btnDelete: ImageButton = v.findViewById(R.id.btnDeleteCredit)
     }
-
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-        val v = LayoutInflater.from(parent.context).inflate(R.layout.item_credit, parent, false)
-        return VH(v)
-    }
-
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH =
+        VH(LayoutInflater.from(parent.context).inflate(R.layout.item_credit, parent, false))
     override fun onBindViewHolder(holder: VH, position: Int) {
         val c = items[position]
         holder.name.text = c.name
         holder.details.text = "${c.rate} % годовых · ${c.termMonths} мес. · платёж ${moneyFormat.format(c.monthlyPayment)} ₽"
-
         val daily = c.principal * c.rate / 100.0 / 365.0
-        holder.principal.text = if (c.principal > 0 && c.rate > 0) {
+        holder.principal.text = if (c.principal > 0 && c.rate > 0)
             "Тело: ${moneyFormat.format(c.principal)} ₽ · ≈${moneyFormat.format(daily)} ₽/день"
-        } else {
-            "Тело: ${moneyFormat.format(c.principal)} ₽"
-        }
-
+        else "Тело: ${moneyFormat.format(c.principal)} ₽"
         holder.btnPay.setOnClickListener { onPay(c) }
         holder.btnEdit.setOnClickListener { onEdit(c) }
         holder.btnDelete.setOnClickListener { onDelete(c) }
     }
-
     override fun getItemCount() = items.size
 }
 
 class CreditCalculatorActivity : AppCompatActivity() {
-
     private val credits = mutableListOf<Credit>()
     private lateinit var adapter: CreditListAdapter
     private lateinit var recycler: RecyclerView
     private lateinit var emptyText: TextView
-
     private val prefs by lazy { getSharedPreferences("debt_savings_prefs", Context.MODE_PRIVATE) }
     private val moneyFormat = NumberFormat.getNumberInstance(Locale("ru", "RU")).apply {
         maximumFractionDigits = 2
@@ -85,28 +72,16 @@ class CreditCalculatorActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_credit)
-
         val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         toolbar.setNavigationOnClickListener { finish() }
-
         recycler = findViewById(R.id.recyclerCredits)
         emptyText = findViewById(R.id.emptyCredits)
-
-        adapter = CreditListAdapter(
-            credits,
-            onEdit = { showCreditDialog(it) },
-            onDelete = { confirmDelete(it) },
-            onPay = { showPaymentDialog(it) }
-        )
+        adapter = CreditListAdapter(credits, { showCreditDialog(it) }, { confirmDelete(it) }, { showPaymentDialog(it) })
         recycler.layoutManager = LinearLayoutManager(this)
         recycler.adapter = adapter
-
-        findViewById<FloatingActionButton>(R.id.fabAddCredit).setOnClickListener {
-            showCreditDialog(null)
-        }
-
+        findViewById<FloatingActionButton>(R.id.fabAddCredit).setOnClickListener { showCreditDialog(null) }
         loadCredits()
         updateEmpty()
     }
@@ -127,7 +102,6 @@ class CreditCalculatorActivity : AppCompatActivity() {
             editPayment.setText(existing.monthlyPayment.toString())
             editPrincipal.setText(existing.principal.toString())
         }
-
         fun preview() {
             val rate = editRate.text.toString().replace(',', '.').toDoubleOrNull()
             val term = editTerm.text.toString().toIntOrNull()
@@ -146,7 +120,6 @@ class CreditCalculatorActivity : AppCompatActivity() {
                     "Всего выплат: ${moneyFormat.format(totalPaid)} ₽\n" +
                     "Переплата: ${moneyFormat.format(over)} ₽"
         }
-
         editRate.setOnFocusChangeListener { _, _ -> preview() }
         editTerm.setOnFocusChangeListener { _, _ -> preview() }
         editPayment.setOnFocusChangeListener { _, _ -> preview() }
@@ -160,28 +133,16 @@ class CreditCalculatorActivity : AppCompatActivity() {
                 val term = editTerm.text.toString().toIntOrNull()
                 val payment = editPayment.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
                 val principal = editPrincipal.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
-
                 if (rate == null || rate <= 0 || term == null || term <= 0) {
                     Toast.makeText(this, "Укажите ставку и срок", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-
                 if (existing == null) {
-                    val c = Credit(
-                        id = UUID.randomUUID().toString(),
-                        name = name,
-                        rate = rate,
-                        termMonths = term,
-                        monthlyPayment = payment,
-                        principal = principal,
-                        lastInterestDate = System.currentTimeMillis()
-                    )
+                    val c = Credit(UUID.randomUUID().toString(), name, rate, term, payment, principal,
+                        DailyInterest.startOfMoscowDay(System.currentTimeMillis()))
                     credits.add(0, c)
-                    addTransaction(
-                        amount = -principal,
-                        note = "Получен кредит: $name (тело долга)",
-                        creditId = c.id
-                    )
+                    // A newly received loan is real debt: it immediately appears as a negative operation.
+                    addTransaction(-principal, "Получен кредит: $name (тело долга)", c.id)
                     adapter.notifyItemInserted(0)
                 } else {
                     existing.name = name
@@ -194,11 +155,10 @@ class CreditCalculatorActivity : AppCompatActivity() {
                 }
                 saveCredits()
                 updateEmpty()
-                Toast.makeText(this, "Сохранено. Тело долга добавлено в общий баланс", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Сохранено", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Отмена", null)
             .show()
-
         preview()
     }
 
@@ -209,7 +169,6 @@ class CreditCalculatorActivity : AppCompatActivity() {
             setText(if (credit.monthlyPayment > 0) credit.monthlyPayment.toString() else "")
             setPadding(48, 32, 48, 32)
         }
-
         AlertDialog.Builder(this)
             .setTitle("Платёж: ${credit.name}")
             .setMessage("Текущее тело: ${moneyFormat.format(credit.principal)} ₽")
@@ -287,21 +246,11 @@ class CreditCalculatorActivity : AppCompatActivity() {
             val arr = JSONArray(json)
             for (i in 0 until arr.length()) {
                 val o = arr.getJSONObject(i)
-                credits.add(
-                    Credit(
-                        id = o.getString("id"),
-                        name = o.getString("name"),
-                        rate = o.getDouble("rate"),
-                        termMonths = o.getInt("termMonths"),
-                        monthlyPayment = o.getDouble("monthlyPayment"),
-                        principal = o.getDouble("principal"),
-                        lastInterestDate = o.optLong("lastInterestDate", 0L)
-                    )
-                )
+                credits.add(Credit(o.getString("id"), o.getString("name"), o.getDouble("rate"),
+                    o.getInt("termMonths"), o.getDouble("monthlyPayment"), o.getDouble("principal"),
+                    o.optLong("lastInterestDate", 0L)))
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        } catch (e: Exception) { e.printStackTrace() }
         adapter.notifyDataSetChanged()
     }
 
