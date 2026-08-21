@@ -10,6 +10,8 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Single source of truth for daily interest accrual.
+ * Interest is a separate debt expense: it increases the total journal debt,
+ * but NEVER increases the credit principal (body of the debt).
  * All dates are calculated in Moscow time, regardless of the phone's timezone.
  */
 object DailyInterest {
@@ -37,7 +39,9 @@ object DailyInterest {
             if (days <= 0) continue
 
             if (credit.principal > 0.0 && credit.rate > 0.0) {
-                // Existing app logic uses simple daily accrual: annual rate / 365.
+                // Interest is calculated from the original/current principal only.
+                // It is recorded as a separate negative transaction and does not
+                // compound by increasing credit.principal.
                 val dailyRate = credit.rate / 100.0 / 365.0
                 val interest = credit.principal * dailyRate * days
 
@@ -52,7 +56,6 @@ object DailyInterest {
                             creditId = credit.id
                         )
                     )
-                    credit.principal += interest
                     changed = true
                 }
             }
