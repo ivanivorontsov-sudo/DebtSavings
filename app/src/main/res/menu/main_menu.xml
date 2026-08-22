@@ -6,4 +6,9 @@
         android:title="@string/credit_calc"
         android:icon="@android:drawable/ic_menu_sort_by_size"
         app:showAsAction="never" />
+    <item
+        android:id="@+id/menu_savings"
+        android:title="Накопительный счёт"
+        android:icon="@android:drawable/ic_menu_save"
+        app:showAsAction="never" />
 </menu>
