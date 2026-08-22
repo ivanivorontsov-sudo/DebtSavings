@@ -10,16 +10,17 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Single source of truth for daily interest accrual.
- * Interest is a separate debt expense: it increases the total journal debt,
- * but NEVER increases the credit principal (body of the debt).
- * All dates are calculated in Moscow time, regardless of the phone's timezone.
+ * Credit interest is a separate negative transaction and never increases
+ * the credit principal. Savings interest is a positive transaction and is
+ * added to the general balance, therefore it compounds day by day.
  */
 object DailyInterest {
     private const val MOSCOW_TZ = "Europe/Moscow"
     private const val TRANSACTIONS_KEY = "transactions"
     private const val CREDITS_KEY = "credits"
+    private const val SAVINGS_RATE_KEY = "savings_rate"
+    private const val SAVINGS_LAST_DATE_KEY = "savings_last_interest_date"
 
-    /** Applies every missed Moscow calendar day exactly once and persists the result. */
     fun applyIfNeeded(
         prefs: SharedPreferences,
         transactions: MutableList<Transaction>,
@@ -34,34 +35,39 @@ object DailyInterest {
                 changed = true
                 continue
             }
-
             val days = TimeUnit.MILLISECONDS.toDays(today - credit.lastInterestDate).toInt()
-            if (days <= 0) continue
-
-            if (credit.principal > 0.0 && credit.rate > 0.0) {
-                // Interest is calculated from the original/current principal only.
-                // It is recorded as a separate negative transaction and does not
-                // compound by increasing credit.principal.
-                val dailyRate = credit.rate / 100.0 / 365.0
-                val interest = credit.principal * dailyRate * days
-
-                if (interest > 0.0) {
-                    transactions.add(
-                        0,
-                        Transaction(
-                            id = UUID.randomUUID().toString(),
-                            amount = -interest,
-                            timestamp = today,
-                            note = "Проценты: ${credit.name} за $days дн.",
-                            creditId = credit.id
-                        )
-                    )
-                    changed = true
+            if (days > 0) {
+                if (credit.principal > 0.0 && credit.rate > 0.0) {
+                    val interest = credit.principal * (credit.rate / 100.0 / 365.0) * days
+                    if (interest > 0.0) {
+                        transactions.add(0, Transaction(UUID.randomUUID().toString(), -interest, today, "Проценты: ${credit.name} за $days дн.", credit.id))
+                        changed = true
+                    }
                 }
+                credit.lastInterestDate = today
+                changed = true
             }
+        }
 
-            credit.lastInterestDate = today
-            changed = true
+        // Savings interest is positive and is added to the balance. The next day
+        // is calculated from the increased balance, so capitalization is daily.
+        val savingsRate = prefs.getFloat(SAVINGS_RATE_KEY, 0f).toDouble()
+        val savingsLastDate = prefs.getLong(SAVINGS_LAST_DATE_KEY, 0L)
+        if (savingsLastDate == 0L) {
+            prefs.edit().putLong(SAVINGS_LAST_DATE_KEY, today).apply()
+        } else {
+            val days = TimeUnit.MILLISECONDS.toDays(today - savingsLastDate).toInt()
+            if (days > 0) {
+                val savingsBalance = transactions.sumOf { it.amount }.coerceAtLeast(0.0)
+                if (savingsRate > 0.0 && savingsBalance > 0.0) {
+                    val interest = savingsBalance * (savingsRate / 100.0 / 365.0) * days
+                    if (interest > 0.0) {
+                        transactions.add(0, Transaction(UUID.randomUUID().toString(), interest, today, "Проценты накопительного счёта за $days дн.", null))
+                        changed = true
+                    }
+                }
+                prefs.edit().putLong(SAVINGS_LAST_DATE_KEY, today).apply()
+            }
         }
 
         if (changed) {
@@ -84,13 +90,14 @@ object DailyInterest {
     private fun saveTransactions(prefs: SharedPreferences, transactions: List<Transaction>) {
         val arr = JSONArray()
         transactions.forEach { tx ->
-            val o = JSONObject()
-            o.put("id", tx.id)
-            o.put("amount", tx.amount)
-            o.put("timestamp", tx.timestamp)
-            o.put("note", tx.note)
-            if (tx.creditId != null) o.put("creditId", tx.creditId)
-            arr.put(o)
+            JSONObject().apply {
+                put("id", tx.id)
+                put("amount", tx.amount)
+                put("timestamp", tx.timestamp)
+                put("note", tx.note)
+                if (tx.creditId != null) put("creditId", tx.creditId)
+                arr.put(this)
+            }
         }
         prefs.edit().putString(TRANSACTIONS_KEY, arr.toString()).apply()
     }
@@ -98,15 +105,16 @@ object DailyInterest {
     private fun saveCredits(prefs: SharedPreferences, credits: List<Credit>) {
         val arr = JSONArray()
         credits.forEach { c ->
-            val o = JSONObject()
-            o.put("id", c.id)
-            o.put("name", c.name)
-            o.put("rate", c.rate)
-            o.put("termMonths", c.termMonths)
-            o.put("monthlyPayment", c.monthlyPayment)
-            o.put("principal", c.principal)
-            o.put("lastInterestDate", c.lastInterestDate)
-            arr.put(o)
+            JSONObject().apply {
+                put("id", c.id)
+                put("name", c.name)
+                put("rate", c.rate)
+                put("termMonths", c.termMonths)
+                put("monthlyPayment", c.monthlyPayment)
+                put("principal", c.principal)
+                put("lastInterestDate", c.lastInterestDate)
+                arr.put(this)
+            }
         }
         prefs.edit().putString(CREDITS_KEY, arr.toString()).apply()
     }
