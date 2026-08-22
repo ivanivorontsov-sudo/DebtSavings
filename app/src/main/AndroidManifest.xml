@@ -29,6 +29,12 @@
             android:parentActivityName=".MainActivity"
             android:label="Калькулятор кредита" />
 
+        <activity
+            android:name=".SavingsCalculatorActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:label="Накопительный счёт" />
+
         <receiver
             android:name=".InterestAlarmReceiver"
             android:exported="false" />
