@@ -42,6 +42,18 @@
             android:parentActivityName=".MainActivity"
             android:label="Подписки" />
 
+        <activity
+            android:name=".CalendarActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:label="Календарь" />
+
+        <activity
+            android:name=".JournalActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:label="Все операции" />
+
         <receiver
             android:name=".InterestAlarmReceiver"
             android:exported="false" />

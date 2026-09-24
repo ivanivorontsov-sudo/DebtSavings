@@ -2,6 +2,7 @@ package com.example.debtsavings
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.MenuItem
@@ -11,9 +12,11 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -69,15 +72,82 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textBalance: TextView
     private lateinit var labelBalance: TextView
     private lateinit var textCreditInfo: TextView
+    private lateinit var textSavingsRow: TextView
+    private lateinit var cardCreditsTable: View
+    private lateinit var creditsTableBody: LinearLayout
+    private lateinit var textCreditsTotals: TextView
     private lateinit var warningBanner: TextView
     private lateinit var recycler: RecyclerView
     private lateinit var emptyJournal: TextView
     private lateinit var btnUndo: MaterialButton
+    private lateinit var btnJournalFull: MaterialButton
     private val transactions = mutableListOf<Transaction>()
+    private val previewTx = mutableListOf<Transaction>()
     private val credits = mutableListOf<Credit>()
     private lateinit var adapter: TransactionAdapter
+    private val previewLimit = 5
     private var selectedCreditId: String? = null
     private val prefs by lazy { getSharedPreferences(Persistence.PREFS_NAME, Context.MODE_PRIVATE) }
+    private val subscriptionsForBackup = mutableListOf<Subscription>()
+
+    private val exportLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri: Uri? ->
+        if (uri == null) return@registerForActivityResult
+        try {
+            contentResolver.openOutputStream(uri)?.use { out ->
+                Persistence.loadSubscriptions(prefs, subscriptionsForBackup)
+                val snap = DataBackup.Snapshot(
+                    credits = credits.toList(),
+                    transactions = transactions.toList(),
+                    subscriptions = subscriptionsForBackup.toList(),
+                    savingsRate = prefs.getFloat("savings_rate", 0f),
+                    savingsLastInterestDate = prefs.getLong("savings_last_interest_date", 0L),
+                    defaultsSeeded = prefs.getBoolean(Persistence.DEFAULTS_SEEDED_KEY, false)
+                )
+                DataBackup.writeToStream(prefs, snap, out)
+            } ?: throw IllegalStateException("Не удалось открыть файл")
+            Toast.makeText(this, "Экспорт сохранён", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Ошибка экспорта: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private val importLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri == null) return@registerForActivityResult
+        try {
+            val snap = contentResolver.openInputStream(uri)?.use { DataBackup.parse(it) }
+                ?: throw IllegalStateException("Не удалось прочитать файл")
+            AlertDialog.Builder(this)
+                .setTitle("Импорт")
+                .setMessage(
+                    "Заменить все текущие данные?\n\n" +
+                        "Кредитов: ${snap.credits.size}\n" +
+                        "Операций: ${snap.transactions.size}\n" +
+                        "Подписок: ${snap.subscriptions.size}"
+                )
+                .setPositiveButton("Заменить") { _, _ ->
+                    try {
+                        DataBackup.apply(prefs, snap)
+                        loadAll()
+                        applyDailyInterestIfNeeded()
+                        setupCreditSpinner()
+                        updateUI()
+                        InterestAlarmScheduler.scheduleNext(this)
+                        SubscriptionAlarmScheduler.scheduleNext(this)
+                        Toast.makeText(this, "Импорт выполнен", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "Ошибка применения: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+                .setNegativeButton("Отмена", null)
+                .show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Ошибка импорта: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
     private val moneyFormat = NumberFormat.getNumberInstance(Locale("ru", "RU")).apply {
         maximumFractionDigits = 2; minimumFractionDigits = 0
     }
@@ -91,16 +161,24 @@ class MainActivity : AppCompatActivity() {
         textBalance = findViewById(R.id.textBalance)
         labelBalance = findViewById(R.id.labelBalance)
         textCreditInfo = findViewById(R.id.textCreditInfo)
+        textSavingsRow = findViewById(R.id.textSavingsRow)
+        cardCreditsTable = findViewById(R.id.cardCreditsTable)
+        creditsTableBody = findViewById(R.id.creditsTableBody)
+        textCreditsTotals = findViewById(R.id.textCreditsTotals)
         warningBanner = findViewById(R.id.warningBanner)
         recycler = findViewById(R.id.recyclerJournal)
         emptyJournal = findViewById(R.id.emptyJournal)
         btnUndo = findViewById(R.id.btnUndo)
-        adapter = TransactionAdapter(transactions, credits) { deleteTransaction(it) }
+        btnJournalFull = findViewById(R.id.btnJournalFull)
+        adapter = TransactionAdapter(previewTx, credits) { deleteTransaction(it) }
         recycler.layoutManager = LinearLayoutManager(this)
         recycler.adapter = adapter
         findViewById<MaterialButton>(R.id.btnPlus).setOnClickListener { applyAmount(true) }
         findViewById<MaterialButton>(R.id.btnMinus).setOnClickListener { applyAmount(false) }
         btnUndo.setOnClickListener { undoLast() }
+        btnJournalFull.setOnClickListener {
+            startActivity(Intent(this, JournalActivity::class.java))
+        }
         spinnerCredit.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
                 selectedCreditId = if (pos == 0) null else credits.getOrNull(pos - 1)?.id
@@ -136,6 +214,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
+            R.id.menu_calendar -> {
+                startActivity(Intent(this, CalendarActivity::class.java)); return true
+            }
             R.id.menu_credit -> {
                 startActivity(Intent(this, CreditCalculatorActivity::class.java)); return true
             }
@@ -144,6 +225,12 @@ class MainActivity : AppCompatActivity() {
             }
             R.id.menu_subscriptions -> {
                 startActivity(Intent(this, SubscriptionsActivity::class.java)); return true
+            }
+            R.id.menu_export -> {
+                exportLauncher.launch(DataBackup.defaultFileName()); return true
+            }
+            R.id.menu_import -> {
+                importLauncher.launch(arrayOf("application/json", "text/*", "*/*")); return true
             }
         }
         return super.onOptionsItemSelected(item)
@@ -187,8 +274,6 @@ class MainActivity : AppCompatActivity() {
             val note = if (positive) "Пополнение" else "Списание"
             transactions.add(0, Transaction(UUID.randomUUID().toString(), signed, System.currentTimeMillis(), note, null))
         }
-        adapter.notifyItemInserted(0)
-        recycler.scrollToPosition(0)
         editAmount.text?.clear()
         saveTransactions()
         updateUI()
@@ -202,7 +287,6 @@ class MainActivity : AppCompatActivity() {
         }
         val last = transactions.removeAt(0)
         reverseEffect(last)
-        adapter.notifyItemRemoved(0)
         saveTransactions()
         saveCredits()
         updateUI()
@@ -217,7 +301,6 @@ class MainActivity : AppCompatActivity() {
                 if (index >= 0) {
                     val removed = transactions.removeAt(index)
                     reverseEffect(removed)
-                    adapter.notifyItemRemoved(index)
                     saveTransactions()
                     saveCredits()
                     updateUI()
@@ -275,52 +358,72 @@ class MainActivity : AppCompatActivity() {
         val savingsRate = prefs.getFloat("savings_rate", 0f).toDouble()
         val savingsBalance = balance.coerceAtLeast(0.0)
         val savingsDaily = savingsBalance * savingsRate / 100.0 / 365.0
-        if (credits.isNotEmpty()) {
-            textCreditInfo.visibility = View.VISIBLE
-            val totalP = credits.sumOf { it.principal }
-            val totalI = credits.sumOf { it.accruedInterest }
-            val totalF = credits.sumOf { it.accruedFees }
-            val daily = credits.sumOf { c ->
-                if (!c.graceMode && c.principal > 0 && c.rate > 0)
-                    c.principal * c.rate / 100.0 / 365.0 else 0.0
-            }
-            val lines = credits.joinToString("\n") { c ->
-                val mode = if (c.graceMode) "грейс" else "${c.rate}%"
-                val min = WbCreditMath.calculateMinPayment(c)
-                val bal = WbCreditMath.formatBalancesRu(
-                    c.principal, c.accruedInterest, c.accruedFees,
-                    { moneyFormat.format(it) },
-                    principalLabel = "тело", interestLabel = "%", feesLabel = "комис."
-                )
-                val dailyHint = if (!c.graceMode && c.principal > 0.01 && c.rate > 0) {
-                    val d = c.principal * c.rate / 100.0 / 365.0
-                    if (d > 0) " · ≈${moneyFormat.format(d)} ₽/день" else ""
-                } else ""
-                "${c.name}: $bal ($mode)$dailyHint · мин. ${moneyFormat.format(min.total)}"
-            }
-            val totalParts = mutableListOf<String>()
-            if (totalP > 0.01) totalParts.add("Тело: ${moneyFormat.format(totalP)}")
-            if (totalI > 0.01) totalParts.add("начисл.%: ${moneyFormat.format(totalI)}")
-            if (totalF > 0.01) totalParts.add("комис.: ${moneyFormat.format(totalF)}")
-            val totalsLine = if (totalParts.isEmpty()) "остаток 0" else totalParts.joinToString(" · ")
-            val dailyLine = if (daily > 0.0)
-                "%% вне грейса: ≈${moneyFormat.format(daily)} ₽/день\n"
-            else ""
-            textCreditInfo.text =
-                "Накопительный счёт: ${moneyFormat.format(savingsBalance)} ₽ · ${moneyFormat.format(savingsRate)}% · +≈${moneyFormat.format(savingsDaily)} ₽/день\n" +
-                    "Кредиты\n$totalsLine\n" +
-                    dailyLine + lines
+        textCreditInfo.visibility = View.GONE
+        if (savingsRate > 0 || savingsBalance > 0.01) {
+            textSavingsRow.visibility = View.VISIBLE
+            textSavingsRow.text =
+                "Накопительный счёт: ${moneyFormat.format(savingsBalance)} ₽ · ${moneyFormat.format(savingsRate)}%" +
+                    " · +≈${moneyFormat.format(savingsDaily)} ₽/день"
         } else {
-            textCreditInfo.visibility = if (savingsRate > 0) View.VISIBLE else View.GONE
-            if (savingsRate > 0) {
-                textCreditInfo.text =
-                    "Накопительный счёт: ${moneyFormat.format(savingsBalance)} ₽ · ${moneyFormat.format(savingsRate)}% годовых\n" +
-                        "Проценты: +≈${moneyFormat.format(savingsDaily)} ₽/день · +≈${moneyFormat.format(savingsDaily * 30)} ₽/30 дней"
-            }
+            textSavingsRow.visibility = View.GONE
         }
+        renderCreditsTable()
+        refreshPreview()
         emptyJournal.visibility = if (transactions.isEmpty()) View.VISIBLE else View.GONE
         recycler.visibility = if (transactions.isEmpty()) View.GONE else View.VISIBLE
         warningBanner.visibility = if (balance <= -500000.0) View.VISIBLE else View.GONE
+    }
+
+    private fun refreshPreview() {
+        previewTx.clear()
+        previewTx.addAll(transactions.take(previewLimit))
+        adapter.notifyDataSetChanged()
+    }
+
+    private fun renderCreditsTable() {
+        if (credits.isEmpty()) {
+            cardCreditsTable.visibility = View.GONE
+            return
+        }
+        cardCreditsTable.visibility = View.VISIBLE
+        creditsTableBody.removeAllViews()
+        val inflater = LayoutInflater.from(this)
+        var totalP = 0.0
+        var totalI = 0.0
+        var totalF = 0.0
+        var totalDaily = 0.0
+        credits.forEachIndexed { idx, c ->
+            totalP += c.principal
+            totalI += c.accruedInterest
+            totalF += c.accruedFees
+            val row = inflater.inflate(R.layout.item_credit_table_row, creditsTableBody, false)
+            if (idx % 2 == 1) row.setBackgroundColor(0x0A000000)
+            row.findViewById<TextView>(R.id.rowName).text = c.name
+            row.findViewById<TextView>(R.id.rowPrincipal).text =
+                if (c.principal > 0.01) "Тело ${moneyFormat.format(c.principal)}" else "Тело —"
+            row.findViewById<TextView>(R.id.rowInterest).text =
+                if (c.accruedInterest > 0.01) "% ${moneyFormat.format(c.accruedInterest)}" else "% —"
+            row.findViewById<TextView>(R.id.rowFees).text =
+                if (c.accruedFees > 0.01) "Ком. ${moneyFormat.format(c.accruedFees)}" else "Ком. —"
+            val mode = if (c.graceMode) "Грейс" else "${moneyFormat.format(c.rate)}%"
+            row.findViewById<TextView>(R.id.rowMode).text = mode
+            val daily = if (!c.graceMode && c.principal > 0.01 && c.rate > 0)
+                c.principal * c.rate / 100.0 / 365.0 else 0.0
+            totalDaily += daily
+            row.findViewById<TextView>(R.id.rowDaily).text =
+                if (daily > 0.01) "≈${moneyFormat.format(daily)}/д" else "—"
+            val min = WbCreditMath.calculateMinPayment(c)
+            row.findViewById<TextView>(R.id.rowMin).text =
+                if (min.total > 0.01) "Мин. ${moneyFormat.format(min.total)}" else "Мин. —"
+            creditsTableBody.addView(row)
+        }
+        val parts = mutableListOf<String>()
+        if (totalP > 0.01) parts.add("Тело ${moneyFormat.format(totalP)}")
+        if (totalI > 0.01) parts.add("% ${moneyFormat.format(totalI)}")
+        if (totalF > 0.01) parts.add("комис. ${moneyFormat.format(totalF)}")
+        val dailyPart = if (totalDaily > 0.01) " · ≈${moneyFormat.format(totalDaily)} ₽/день" else ""
+        textCreditsTotals.text =
+            "Итого: " + (if (parts.isEmpty()) "0" else parts.joinToString(" · ")) + dailyPart
     }
 
     private fun checkBankruptcyWarning() {
