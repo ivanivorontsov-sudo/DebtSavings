@@ -23,7 +23,7 @@ class InterestAlarmReceiver : BroadcastReceiver() {
 
         DailyInterest.applyIfNeeded(prefs, transactions, credits)
         SubscriptionNotifier.checkAndNotify(context)
-        PaymentReminders.checkAndNotify(context)
+        // Payment reminders fire only at local 09/14/20 via PaymentReminderReceiver
         InterestAlarmScheduler.scheduleNext(context)
         SubscriptionAlarmScheduler.scheduleNext(context)
         PaymentReminderScheduler.scheduleNext(context)
