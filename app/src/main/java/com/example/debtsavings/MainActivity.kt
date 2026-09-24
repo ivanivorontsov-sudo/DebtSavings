@@ -108,6 +108,7 @@ class MainActivity : AppCompatActivity() {
             override fun onNothingSelected(p: AdapterView<*>?) { selectedCreditId = null }
         }
         loadAll()
+        Persistence.ensureDefaultSeed(prefs, credits, transactions)
         applyDailyInterestIfNeeded()
         setupCreditSpinner()
         updateUI()

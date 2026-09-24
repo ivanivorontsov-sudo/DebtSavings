@@ -3,6 +3,7 @@ package com.example.debtsavings
 import android.content.SharedPreferences
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
 
 /**
  * Единая сериализация кредитов/операций/подписок.
@@ -13,6 +14,7 @@ object Persistence {
     const val TRANSACTIONS_KEY = "transactions"
     const val CREDITS_KEY = "credits"
     const val SUBSCRIPTIONS_KEY = "subscriptions"
+    const val DEFAULTS_SEEDED_KEY = "defaults_seeded_v1"
 
     fun loadTransactions(prefs: SharedPreferences, target: MutableList<Transaction>) {
         target.clear()
@@ -167,5 +169,97 @@ object Persistence {
         } catch (_: Exception) {
             SubscriptionCategory.THIRD_PARTY
         }
+    )
+
+    /**
+     * Первый запуск: если кредитов нет и флаг [DEFAULTS_SEEDED_KEY] ещё не ставили —
+     * заполняем живыми остатками пользователя. Существующие данные не трогаем.
+     * Вызывать после load, до DailyInterest.
+     * @return true, если сид применили и сохранили
+     */
+    fun ensureDefaultSeed(
+        prefs: SharedPreferences,
+        credits: MutableList<Credit>,
+        transactions: MutableList<Transaction>
+    ): Boolean {
+        if (credits.isNotEmpty()) return false
+        if (prefs.getBoolean(DEFAULTS_SEEDED_KEY, false)) return false
+
+        val today = DailyInterest.startOfMoscowDay(System.currentTimeMillis())
+        // Стабильные id для сидов; termMonths: 12 общим, 58 для WB-подобных
+        val seeds = listOf(
+            SeedSpec("seed-yandex", "Яндекс Супер Сплит", 4318.1, 0.0, true, 0.0, 0.0, 12),
+            SeedSpec("seed-wb", "WB Кэш", 60000.0, 59.8, true, 60000.0, 0.0, 58),
+            SeedSpec("seed-alfa", "Альфа Карта", 15000.0, 70.0, false, 300.0, 0.0, 12),
+            SeedSpec("seed-tplat", "Т Платинум", 235689.0, 59.8, true, 133000.0, 0.0, 12),
+            SeedSpec("seed-wb2", "Вб_2", 27702.36, 26.0, false, 836.34, 0.0, 58),
+            SeedSpec("seed-wb1", "Вб_1", 145000.0, 26.0, false, 4377.59, 1459.78, 58)
+        )
+
+        credits.clear()
+        transactions.clear()
+
+        // Журнал: oldest first в списке seedTx, затем reverse → newest first в UI
+        val seedTx = mutableListOf<Transaction>()
+        var ts = today
+        for (s in seeds) {
+            credits.add(
+                Credit(
+                    id = s.id,
+                    name = s.name,
+                    rate = s.rate,
+                    termMonths = s.termMonths,
+                    monthlyPayment = s.monthlyPayment,
+                    principal = s.principal,
+                    lastInterestDate = today,
+                    accruedInterest = s.accruedInterest,
+                    accruedFees = 0.0,
+                    graceMode = s.grace,
+                    paymentDay = 25,
+                    autoApplyMinPayment = true,
+                    contractStartDate = today
+                )
+            )
+            seedTx.add(
+                Transaction(
+                    id = UUID.randomUUID().toString(),
+                    amount = -s.principal,
+                    timestamp = ts,
+                    note = "Получен кредит: ${s.name} (тело долга)",
+                    creditId = s.id
+                )
+            )
+            ts += 1000L
+            if (s.accruedInterest > 0.01) {
+                seedTx.add(
+                    Transaction(
+                        id = UUID.randomUUID().toString(),
+                        amount = -s.accruedInterest,
+                        timestamp = ts,
+                        note = "Начисл. %% (старт): ${s.name}",
+                        creditId = s.id
+                    )
+                )
+                ts += 1000L
+            }
+        }
+        // newest first
+        transactions.addAll(seedTx.asReversed())
+
+        prefs.edit().putBoolean(DEFAULTS_SEEDED_KEY, true).apply()
+        saveCredits(prefs, credits)
+        saveTransactions(prefs, transactions)
+        return true
+    }
+
+    private data class SeedSpec(
+        val id: String,
+        val name: String,
+        val principal: Double,
+        val rate: Double,
+        val grace: Boolean,
+        val monthlyPayment: Double,
+        val accruedInterest: Double,
+        val termMonths: Int
     )
 }
