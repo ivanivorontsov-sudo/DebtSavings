@@ -57,15 +57,18 @@ class CreditListAdapter(
         val grace = if (c.graceMode) "грейс" else "%% ${c.rate}"
         holder.details.text =
             "$grace · доля тела ${c.principalSharePercent.toInt()}% · авто-мин: ${if (c.autoApplyMinPayment) "да" else "нет"}"
-        holder.principal.text =
-            "Тело: ${moneyFormat.format(c.principal)} ₽ · %: ${moneyFormat.format(c.accruedInterest)} ₽ · комис.: ${moneyFormat.format(c.accruedFees)} ₽"
+        val balParts = mutableListOf<String>()
+        if (c.principal > 0.01) balParts.add("Тело: ${moneyFormat.format(c.principal)} ₽")
+        if (c.accruedInterest > 0.01) balParts.add("%: ${moneyFormat.format(c.accruedInterest)} ₽")
+        if (c.accruedFees > 0.01) balParts.add("комис.: ${moneyFormat.format(c.accruedFees)} ₽")
+        holder.principal.text = if (balParts.isEmpty()) "остаток 0 ₽" else balParts.joinToString(" · ")
         val min = WbCreditMath.calculateMinPayment(c)
         val due = if (c.nextMinPaymentDue > 0)
             "Срок: ${dateFormat.format(Date(c.nextMinPaymentDue))}"
         else "Срок: —"
+        val hint = if (min.interest > 0.01) "\n(%% в мин. ≈ 1/12 накопленных)" else ""
         holder.minPayment.text =
-            WbCreditMath.formatBreakdownRu(min) { moneyFormat.format(it) } + "\n$due\n" +
-                "(%% в мин. платеже ≈ 1/12 накопленных; погашение: комис. → %% → тело)"
+            WbCreditMath.formatBreakdownRu(min) { moneyFormat.format(it) } + "\n$due$hint"
         holder.btnPay.setOnClickListener { onPay(c) }
         holder.btnEdit.setOnClickListener { onEdit(c) }
         holder.btnDelete.setOnClickListener { onDelete(c) }
@@ -308,10 +311,15 @@ class CreditCalculatorActivity : AppCompatActivity() {
             addView(preview)
         }
         val min = WbCreditMath.calculateMinPayment(credit)
+        val balMsg = WbCreditMath.formatBalancesRu(
+            credit.principal, credit.accruedInterest, credit.accruedFees,
+            { moneyFormat.format(it) },
+            principalLabel = "Тело", interestLabel = "%", feesLabel = "комис."
+        )
         AlertDialog.Builder(this)
             .setTitle("Платёж: ${credit.name}")
             .setMessage(
-                "Тело ${moneyFormat.format(credit.principal)} · % ${moneyFormat.format(credit.accruedInterest)} · комис. ${moneyFormat.format(credit.accruedFees)}\n" +
+                "$balMsg\n" +
                     WbCreditMath.formatBreakdownRu(min) { moneyFormat.format(it) }
             )
             .setView(box)
@@ -325,8 +333,10 @@ class CreditCalculatorActivity : AppCompatActivity() {
                     amount, credit.accruedFees, credit.accruedInterest, credit.principal
                 )
                 WbCreditMath.applyBreakdown(credit, allocated)
-                val note = "Платёж: ${credit.name} · " +
+                val graceBroken = WbCreditMath.afterPartialPayment(credit)
+                var note = "Платёж: ${credit.name} · " +
                     WbCreditMath.formatAllocationRu(allocated) { moneyFormat.format(it) }
+                if (graceBroken) note += " · грейс снят — дальше %% на тело"
                 addTransaction(allocated.total, note, credit.id)
                 saveCredits()
                 val idx = credits.indexOfFirst { it.id == credit.id }

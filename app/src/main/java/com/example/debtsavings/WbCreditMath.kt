@@ -108,6 +108,22 @@ object WbCreditMath {
         credit.principal = (credit.principal - breakdown.principal).coerceAtLeast(0.0)
     }
 
+    /**
+     * Срыв грейса после неполного погашения.
+     * Мин. платёж ≠ полное погашение: если после платежа остался долг
+     * (тело + % + комиссии) > 0.01 — [graceMode] снимается, дальше начисляются %%.
+     * @return true, если грейс был снят этим вызовом
+     */
+    fun afterPartialPayment(credit: Credit): Boolean {
+        if (!credit.graceMode) return false
+        val remaining = credit.principal + credit.accruedInterest + credit.accruedFees
+        if (remaining > 0.01) {
+            credit.graceMode = false
+            return true
+        }
+        return false
+    }
+
     fun yearMonthOf(millis: Long): Int {
         val cal = moscowCal(millis)
         return cal.get(Calendar.YEAR) * 100 + (cal.get(Calendar.MONTH) + 1)
@@ -137,14 +153,40 @@ object WbCreditMath {
         return if (m >= 12) (y + 1) * 100 + 1 else y * 100 + (m + 1)
     }
 
-    fun formatBreakdownRu(b: PaymentBreakdown, money: (Double) -> String): String =
-        "Мин. платёж: ${money(b.total)} ₽\n" +
-            "  · комиссии: ${money(b.fees)} ₽\n" +
-            "  · проценты (≈1/12): ${money(b.interest)} ₽\n" +
-            "  · тело: ${money(b.principal)} ₽"
+    fun formatBreakdownRu(b: PaymentBreakdown, money: (Double) -> String): String {
+        if (b.total <= 0.01) return "нет обязательного платежа"
+        val lines = mutableListOf("Мин. платёж: ${money(b.total)} ₽")
+        if (b.fees > 0.01) lines.add("  · комиссии: ${money(b.fees)} ₽")
+        if (b.interest > 0.01) lines.add("  · проценты (≈1/12): ${money(b.interest)} ₽")
+        if (b.principal > 0.01) lines.add("  · тело: ${money(b.principal)} ₽")
+        return lines.joinToString("\n")
+    }
 
-    fun formatAllocationRu(b: PaymentBreakdown, money: (Double) -> String): String =
-        "Из платежа: комиссии ${money(b.fees)} ₽ · % ${money(b.interest)} ₽ · тело ${money(b.principal)} ₽"
+    fun formatAllocationRu(b: PaymentBreakdown, money: (Double) -> String): String {
+        val parts = mutableListOf<String>()
+        if (b.fees > 0.01) parts.add("комиссии ${money(b.fees)} ₽")
+        if (b.interest > 0.01) parts.add("% ${money(b.interest)} ₽")
+        if (b.principal > 0.01) parts.add("тело ${money(b.principal)} ₽")
+        val body = if (parts.isEmpty()) "0 ₽" else parts.joinToString(" · ")
+        return "Из платежа: $body"
+    }
+
+    /** Остатки: только ненулевые части (тело / % / комис.). */
+    fun formatBalancesRu(
+        principal: Double,
+        interest: Double,
+        fees: Double,
+        money: (Double) -> String,
+        principalLabel: String = "Тело",
+        interestLabel: String = "%",
+        feesLabel: String = "комис."
+    ): String {
+        val parts = mutableListOf<String>()
+        if (principal > 0.01) parts.add("$principalLabel ${money(principal)} ₽")
+        if (interest > 0.01) parts.add("$interestLabel ${money(interest)} ₽")
+        if (fees > 0.01) parts.add("$feesLabel ${money(fees)} ₽")
+        return if (parts.isEmpty()) "остаток 0 ₽" else parts.joinToString(" · ")
+    }
 
     /** Пресет WB Банк / WB Кэш. */
     fun applyWbPreset(credit: Credit) {

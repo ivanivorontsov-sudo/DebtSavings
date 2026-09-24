@@ -170,8 +170,10 @@ class MainActivity : AppCompatActivity() {
                 value, credit.accruedFees, credit.accruedInterest, credit.principal
             )
             WbCreditMath.applyBreakdown(credit, allocated)
-            val note = "Платёж: ${credit.name} · " +
+            val graceBroken = WbCreditMath.afterPartialPayment(credit)
+            var note = "Платёж: ${credit.name} · " +
                 WbCreditMath.formatAllocationRu(allocated) { moneyFormat.format(it) }
+            if (graceBroken) note += " · грейс снят — дальше %% на тело"
             transactions.add(0, Transaction(UUID.randomUUID().toString(), allocated.total, System.currentTimeMillis(), note, creditId))
             saveCredits()
         } else if (credit != null && !positive) {
@@ -286,12 +288,29 @@ class MainActivity : AppCompatActivity() {
             val lines = credits.joinToString("\n") { c ->
                 val mode = if (c.graceMode) "грейс" else "${c.rate}%"
                 val min = WbCreditMath.calculateMinPayment(c)
-                "${c.name}: тело ${moneyFormat.format(c.principal)} · % ${moneyFormat.format(c.accruedInterest)} · комис. ${moneyFormat.format(c.accruedFees)} ($mode) · мин. ${moneyFormat.format(min.total)}"
+                val bal = WbCreditMath.formatBalancesRu(
+                    c.principal, c.accruedInterest, c.accruedFees,
+                    { moneyFormat.format(it) },
+                    principalLabel = "тело", interestLabel = "%", feesLabel = "комис."
+                )
+                val dailyHint = if (!c.graceMode && c.principal > 0.01 && c.rate > 0) {
+                    val d = c.principal * c.rate / 100.0 / 365.0
+                    if (d > 0) " · ≈${moneyFormat.format(d)} ₽/день" else ""
+                } else ""
+                "${c.name}: $bal ($mode)$dailyHint · мин. ${moneyFormat.format(min.total)}"
             }
+            val totalParts = mutableListOf<String>()
+            if (totalP > 0.01) totalParts.add("Тело: ${moneyFormat.format(totalP)}")
+            if (totalI > 0.01) totalParts.add("начисл.%: ${moneyFormat.format(totalI)}")
+            if (totalF > 0.01) totalParts.add("комис.: ${moneyFormat.format(totalF)}")
+            val totalsLine = if (totalParts.isEmpty()) "остаток 0" else totalParts.joinToString(" · ")
+            val dailyLine = if (daily > 0.0)
+                "%% вне грейса: ≈${moneyFormat.format(daily)} ₽/день\n"
+            else ""
             textCreditInfo.text =
                 "Накопительный счёт: ${moneyFormat.format(savingsBalance)} ₽ · ${moneyFormat.format(savingsRate)}% · +≈${moneyFormat.format(savingsDaily)} ₽/день\n" +
-                    "Кредиты\nТело: ${moneyFormat.format(totalP)} · начисл.%: ${moneyFormat.format(totalI)} · комис.: ${moneyFormat.format(totalF)}\n" +
-                    "%% вне грейса: ≈${moneyFormat.format(daily)} ₽/день\n$lines"
+                    "Кредиты\n$totalsLine\n" +
+                    dailyLine + lines
         } else {
             textCreditInfo.visibility = if (savingsRate > 0) View.VISIBLE else View.GONE
             if (savingsRate > 0) {
