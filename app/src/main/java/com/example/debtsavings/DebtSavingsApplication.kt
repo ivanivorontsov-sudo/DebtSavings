@@ -14,7 +14,10 @@ class DebtSavingsApplication : Application() {
         DailyInterest.applyIfNeeded(prefs, transactions, credits)
         InterestAlarmScheduler.scheduleNext(this)
         SubscriptionNotifier.ensureChannel(this)
+        PaymentReminders.ensureChannel(this)
         SubscriptionNotifier.checkAndNotify(this)
+        PaymentReminders.checkAndNotify(this)
         SubscriptionAlarmScheduler.scheduleNext(this)
+        PaymentReminderScheduler.scheduleNext(this)
     }
 }

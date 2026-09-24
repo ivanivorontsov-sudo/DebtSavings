@@ -79,6 +79,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var warningBanner: TextView
     private lateinit var recycler: RecyclerView
     private lateinit var emptyJournal: TextView
+    private lateinit var journalScrollHint: TextView
     private lateinit var btnUndo: MaterialButton
     private lateinit var btnJournalFull: MaterialButton
     private val transactions = mutableListOf<Transaction>()
@@ -137,6 +138,7 @@ class MainActivity : AppCompatActivity() {
                         updateUI()
                         InterestAlarmScheduler.scheduleNext(this)
                         SubscriptionAlarmScheduler.scheduleNext(this)
+                        PaymentReminderScheduler.scheduleNext(this)
                         Toast.makeText(this, "Импорт выполнен", Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
                         Toast.makeText(this, "Ошибка применения: ${e.message}", Toast.LENGTH_LONG).show()
@@ -168,10 +170,12 @@ class MainActivity : AppCompatActivity() {
         warningBanner = findViewById(R.id.warningBanner)
         recycler = findViewById(R.id.recyclerJournal)
         emptyJournal = findViewById(R.id.emptyJournal)
+        journalScrollHint = findViewById(R.id.journalScrollHint)
         btnUndo = findViewById(R.id.btnUndo)
         btnJournalFull = findViewById(R.id.btnJournalFull)
         adapter = TransactionAdapter(previewTx, credits) { deleteTransaction(it) }
         recycler.layoutManager = LinearLayoutManager(this)
+        recycler.isNestedScrollingEnabled = false
         recycler.adapter = adapter
         findViewById<MaterialButton>(R.id.btnPlus).setOnClickListener { applyAmount(true) }
         findViewById<MaterialButton>(R.id.btnMinus).setOnClickListener { applyAmount(false) }
@@ -192,7 +196,9 @@ class MainActivity : AppCompatActivity() {
         updateUI()
         InterestAlarmScheduler.scheduleNext(this)
         SubscriptionAlarmScheduler.scheduleNext(this)
+        PaymentReminderScheduler.scheduleNext(this)
         SubscriptionNotifier.checkAndNotify(this)
+        PaymentReminders.checkAndNotify(this)
     }
 
     override fun onResume() {
@@ -205,6 +211,7 @@ class MainActivity : AppCompatActivity() {
         updateUI()
         InterestAlarmScheduler.scheduleNext(this)
         SubscriptionAlarmScheduler.scheduleNext(this)
+        PaymentReminderScheduler.scheduleNext(this)
     }
 
     override fun onCreateOptionsMenu(menu: android.view.Menu?): Boolean {
@@ -369,8 +376,10 @@ class MainActivity : AppCompatActivity() {
         }
         renderCreditsTable()
         refreshPreview()
-        emptyJournal.visibility = if (transactions.isEmpty()) View.VISIBLE else View.GONE
-        recycler.visibility = if (transactions.isEmpty()) View.GONE else View.VISIBLE
+        val journalEmpty = transactions.isEmpty()
+        emptyJournal.visibility = if (journalEmpty) View.VISIBLE else View.GONE
+        journalScrollHint.visibility = if (journalEmpty) View.VISIBLE else View.GONE
+        recycler.visibility = if (journalEmpty) View.GONE else View.VISIBLE
         warningBanner.visibility = if (balance <= -500000.0) View.VISIBLE else View.GONE
     }
 

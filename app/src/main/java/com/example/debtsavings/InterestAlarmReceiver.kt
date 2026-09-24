@@ -23,8 +23,10 @@ class InterestAlarmReceiver : BroadcastReceiver() {
 
         DailyInterest.applyIfNeeded(prefs, transactions, credits)
         SubscriptionNotifier.checkAndNotify(context)
+        PaymentReminders.checkAndNotify(context)
         InterestAlarmScheduler.scheduleNext(context)
         SubscriptionAlarmScheduler.scheduleNext(context)
+        PaymentReminderScheduler.scheduleNext(context)
     }
 }
 
@@ -38,6 +40,7 @@ class InterestBootReceiver : BroadcastReceiver() {
             Intent.ACTION_TIMEZONE_CHANGED -> {
                 InterestAlarmScheduler.scheduleNext(context)
                 SubscriptionAlarmScheduler.scheduleNext(context)
+                PaymentReminderScheduler.scheduleNext(context)
             }
         }
     }

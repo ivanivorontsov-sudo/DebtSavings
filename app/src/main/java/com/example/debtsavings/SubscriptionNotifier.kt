@@ -82,6 +82,8 @@ object SubscriptionNotifier {
             val chargeDay = DailyInterest.startOfMoscowDay(s.nextChargeDate)
             val daysLeft = TimeUnit.MILLISECONDS.toDays(chargeDay - today).toInt()
             if (daysLeft < 0) continue
+            // Days 0..3: PaymentReminders sends 3×/day; here only earlier thresholds (e.g. 7).
+            if (daysLeft in 0..3) continue
             val thresholds = s.notifyDays.split(',')
                 .mapNotNull { it.trim().toIntOrNull() }
                 .filter { it >= 0 }

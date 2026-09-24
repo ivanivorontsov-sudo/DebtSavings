@@ -136,6 +136,7 @@ class SubscriptionsActivity : AppCompatActivity() {
         load()
         SubscriptionNotifier.checkAndNotify(this)
         SubscriptionAlarmScheduler.scheduleNext(this)
+        PaymentReminderScheduler.scheduleNext(this)
         updateEmpty()
     }
 
@@ -322,6 +323,7 @@ class SubscriptionsActivity : AppCompatActivity() {
                 save()
                 updateEmpty()
                 SubscriptionAlarmScheduler.scheduleNext(this)
+        PaymentReminderScheduler.scheduleNext(this)
                 Toast.makeText(this, "Сохранено", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Отмена", null)

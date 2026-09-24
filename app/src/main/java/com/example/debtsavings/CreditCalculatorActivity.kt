@@ -401,7 +401,10 @@ class CreditCalculatorActivity : AppCompatActivity() {
         Persistence.saveTransactions(prefs, txs)
     }
 
-    private fun saveCredits() = Persistence.saveCredits(prefs, credits)
+    private fun saveCredits() {
+        Persistence.saveCredits(prefs, credits)
+        PaymentReminderScheduler.scheduleNext(this)
+    }
 
     private fun loadCredits() {
         Persistence.loadCredits(prefs, credits)
