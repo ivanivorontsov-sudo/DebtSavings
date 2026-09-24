@@ -1,5 +1,6 @@
 package com.example.debtsavings
 
+import android.app.DatePickerDialog
 import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -16,12 +17,14 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
-import org.json.JSONArray
-import org.json.JSONObject
+import com.google.android.material.materialswitch.MaterialSwitch
 import java.text.NumberFormat
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import java.util.UUID
-import kotlin.math.pow
 
 class CreditListAdapter(
     private val items: MutableList<Credit>,
@@ -33,28 +36,41 @@ class CreditListAdapter(
         maximumFractionDigits = 2
         minimumFractionDigits = 0
     }
+    private val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale("ru", "RU"))
+
     class VH(v: View) : RecyclerView.ViewHolder(v) {
         val name: TextView = v.findViewById(R.id.creditName)
         val details: TextView = v.findViewById(R.id.creditDetails)
         val principal: TextView = v.findViewById(R.id.creditPrincipal)
+        val minPayment: TextView = v.findViewById(R.id.creditMinPayment)
         val btnPay: MaterialButton = v.findViewById(R.id.btnPayCredit)
         val btnEdit: ImageButton = v.findViewById(R.id.btnEditCredit)
         val btnDelete: ImageButton = v.findViewById(R.id.btnDeleteCredit)
     }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH =
         VH(LayoutInflater.from(parent.context).inflate(R.layout.item_credit, parent, false))
+
     override fun onBindViewHolder(holder: VH, position: Int) {
         val c = items[position]
         holder.name.text = c.name
-        holder.details.text = "${c.rate} % годовых · ${c.termMonths} мес. · платёж ${moneyFormat.format(c.monthlyPayment)} ₽"
-        val daily = c.principal * c.rate / 100.0 / 365.0
-        holder.principal.text = if (c.principal > 0 && c.rate > 0)
-            "Тело: ${moneyFormat.format(c.principal)} ₽ · ≈${moneyFormat.format(daily)} ₽/день"
-        else "Тело: ${moneyFormat.format(c.principal)} ₽"
+        val grace = if (c.graceMode) "грейс" else "%% ${c.rate}"
+        holder.details.text =
+            "$grace · доля тела ${c.principalSharePercent.toInt()}% · авто-мин: ${if (c.autoApplyMinPayment) "да" else "нет"}"
+        holder.principal.text =
+            "Тело: ${moneyFormat.format(c.principal)} ₽ · %: ${moneyFormat.format(c.accruedInterest)} ₽ · комис.: ${moneyFormat.format(c.accruedFees)} ₽"
+        val min = WbCreditMath.calculateMinPayment(c)
+        val due = if (c.nextMinPaymentDue > 0)
+            "Срок: ${dateFormat.format(Date(c.nextMinPaymentDue))}"
+        else "Срок: —"
+        holder.minPayment.text =
+            WbCreditMath.formatBreakdownRu(min) { moneyFormat.format(it) } + "\n$due\n" +
+                "(%% в мин. платеже ≈ 1/12 накопленных; погашение: комис. → %% → тело)"
         holder.btnPay.setOnClickListener { onPay(c) }
         holder.btnEdit.setOnClickListener { onEdit(c) }
         holder.btnDelete.setOnClickListener { onDelete(c) }
     }
+
     override fun getItemCount() = items.size
 }
 
@@ -63,11 +79,12 @@ class CreditCalculatorActivity : AppCompatActivity() {
     private lateinit var adapter: CreditListAdapter
     private lateinit var recycler: RecyclerView
     private lateinit var emptyText: TextView
-    private val prefs by lazy { getSharedPreferences("debt_savings_prefs", Context.MODE_PRIVATE) }
+    private val prefs by lazy { getSharedPreferences(Persistence.PREFS_NAME, Context.MODE_PRIVATE) }
     private val moneyFormat = NumberFormat.getNumberInstance(Locale("ru", "RU")).apply {
         maximumFractionDigits = 2
         minimumFractionDigits = 0
     }
+    private val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale("ru", "RU"))
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -83,6 +100,11 @@ class CreditCalculatorActivity : AppCompatActivity() {
         recycler.adapter = adapter
         findViewById<FloatingActionButton>(R.id.fabAddCredit).setOnClickListener { showCreditDialog(null) }
         loadCredits()
+        // Подтянуть начисления / авто-мин. при открытии
+        val txs = mutableListOf<Transaction>()
+        Persistence.loadTransactions(prefs, txs)
+        DailyInterest.applyIfNeeded(prefs, txs, credits)
+        adapter.notifyDataSetChanged()
         updateEmpty()
     }
 
@@ -93,36 +115,94 @@ class CreditCalculatorActivity : AppCompatActivity() {
         val editTerm = view.findViewById<EditText>(R.id.editTerm)
         val editPayment = view.findViewById<EditText>(R.id.editPayment)
         val editPrincipal = view.findViewById<EditText>(R.id.editPrincipal)
+        val editInterest = view.findViewById<EditText>(R.id.editAccruedInterest)
+        val editFees = view.findViewById<EditText>(R.id.editAccruedFees)
+        val switchGrace = view.findViewById<MaterialSwitch>(R.id.switchGrace)
+        val editShare = view.findViewById<EditText>(R.id.editSharePercent)
+        val editFloor = view.findViewById<EditText>(R.id.editMinFloor)
+        val editPayDay = view.findViewById<EditText>(R.id.editPaymentDay)
+        val editNextDue = view.findViewById<EditText>(R.id.editNextDue)
+        val switchAuto = view.findViewById<MaterialSwitch>(R.id.switchAutoMin)
         val textCalc = view.findViewById<TextView>(R.id.textCalcPreview)
+        val btnWb = view.findViewById<MaterialButton>(R.id.btnWbPreset)
 
-        if (existing != null) {
-            editName.setText(existing.name)
-            editRate.setText(existing.rate.toString())
-            editTerm.setText(existing.termMonths.toString())
-            editPayment.setText(existing.monthlyPayment.toString())
-            editPrincipal.setText(existing.principal.toString())
+        var nextDueMillis = existing?.nextMinPaymentDue ?: 0L
+
+        fun fillFrom(c: Credit) {
+            editName.setText(c.name)
+            editRate.setText(c.rate.toString())
+            editTerm.setText(c.termMonths.toString())
+            editPayment.setText(c.monthlyPayment.toString())
+            editPrincipal.setText(c.principal.toString())
+            editInterest.setText(c.accruedInterest.toString())
+            editFees.setText(c.accruedFees.toString())
+            switchGrace.isChecked = c.graceMode
+            editShare.setText(c.principalSharePercent.toString())
+            editFloor.setText(c.minPrincipalPaymentFloor.toString())
+            editPayDay.setText(c.paymentDay.toString())
+            switchAuto.isChecked = c.autoApplyMinPayment
+            nextDueMillis = c.nextMinPaymentDue
+            editNextDue.setText(if (nextDueMillis > 0) dateFormat.format(Date(nextDueMillis)) else "")
         }
+
+        if (existing != null) fillFrom(existing) else {
+            editRate.setText(WbCreditMath.DEFAULT_ANNUAL_RATE.toString())
+            editTerm.setText("12")
+            editShare.setText("0")
+            editFloor.setText(WbCreditMath.DEFAULT_MIN_PRINCIPAL_FLOOR.toString())
+            editPayDay.setText(WbCreditMath.DEFAULT_PAYMENT_DAY.toString())
+            editInterest.setText("0")
+            editFees.setText("0")
+            switchAuto.isChecked = true
+        }
+
+        btnWb.setOnClickListener {
+            val tmp = Credit(
+                id = existing?.id ?: "tmp",
+                name = editName.text.toString().ifBlank { "WB Кэш" },
+                rate = WbCreditMath.DEFAULT_ANNUAL_RATE,
+                termMonths = editTerm.text.toString().toIntOrNull() ?: 12,
+                monthlyPayment = 0.0,
+                principal = editPrincipal.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0,
+                lastInterestDate = existing?.lastInterestDate ?: 0L
+            )
+            WbCreditMath.applyWbPreset(tmp)
+            fillFrom(tmp)
+            Toast.makeText(this, "Шаблон WB Банк применён", Toast.LENGTH_SHORT).show()
+        }
+
+        editNextDue.setOnClickListener {
+            val cal = Calendar.getInstance(TimeZone.getTimeZone("Europe/Moscow"))
+            if (nextDueMillis > 0) cal.timeInMillis = nextDueMillis
+            DatePickerDialog(
+                this,
+                { _, y, m, d ->
+                    cal.set(y, m, d, 0, 0, 0)
+                    cal.set(Calendar.MILLISECOND, 0)
+                    nextDueMillis = cal.timeInMillis
+                    editNextDue.setText(dateFormat.format(Date(nextDueMillis)))
+                },
+                cal.get(Calendar.YEAR),
+                cal.get(Calendar.MONTH),
+                cal.get(Calendar.DAY_OF_MONTH)
+            ).show()
+        }
+
         fun preview() {
-            val rate = editRate.text.toString().replace(',', '.').toDoubleOrNull()
-            val term = editTerm.text.toString().toIntOrNull()
-            val payment = editPayment.text.toString().replace(',', '.').toDoubleOrNull()
-            if (rate == null || rate <= 0 || term == null || term <= 0 || payment == null || payment <= 0) {
-                textCalc.text = ""
-                return
-            }
-            val monthlyRate = rate / 100.0 / 12.0
-            val n = term.toDouble()
-            val factor = (1 + monthlyRate).pow(n)
-            val estPrincipal = payment * (factor - 1) / (monthlyRate * factor)
-            val totalPaid = payment * n
-            val over = totalPaid - estPrincipal
-            textCalc.text = "Ориентир. тело по платежу: ${moneyFormat.format(estPrincipal)} ₽\n" +
-                    "Всего выплат: ${moneyFormat.format(totalPaid)} ₽\n" +
-                    "Переплата: ${moneyFormat.format(over)} ₽"
+            val p = editPrincipal.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
+            val ai = editInterest.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
+            val af = editFees.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
+            val share = editShare.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
+            val floor = editFloor.text.toString().replace(',', '.').toDoubleOrNull()
+                ?: WbCreditMath.DEFAULT_MIN_PRINCIPAL_FLOOR
+            val tmp = Credit("x", "x", 0.0, 1, 0.0, p, 0L, ai, af, false, share, floor)
+            val min = WbCreditMath.calculateMinPayment(tmp)
+            textCalc.text = WbCreditMath.formatBreakdownRu(min) { moneyFormat.format(it) } +
+                "\nФормула: комис. + (начисл.% / 12) + доля тела (floor до 100 ₽, мин. пол)"
         }
-        editRate.setOnFocusChangeListener { _, _ -> preview() }
-        editTerm.setOnFocusChangeListener { _, _ -> preview() }
-        editPayment.setOnFocusChangeListener { _, _ -> preview() }
+        listOf(editPrincipal, editInterest, editFees, editShare, editFloor).forEach {
+            it.setOnFocusChangeListener { _, _ -> preview() }
+        }
 
         AlertDialog.Builder(this)
             .setTitle(if (existing == null) "Новый кредит" else "Редактировать кредит")
@@ -130,19 +210,48 @@ class CreditCalculatorActivity : AppCompatActivity() {
             .setPositiveButton("Сохранить") { _, _ ->
                 val name = editName.text.toString().trim().ifEmpty { "Кредит" }
                 val rate = editRate.text.toString().replace(',', '.').toDoubleOrNull()
-                val term = editTerm.text.toString().toIntOrNull()
+                val term = editTerm.text.toString().toIntOrNull() ?: 12
                 val payment = editPayment.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
                 val principal = editPrincipal.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
-                if (rate == null || rate <= 0 || term == null || term <= 0) {
-                    Toast.makeText(this, "Укажите ставку и срок", Toast.LENGTH_SHORT).show()
+                val interest = editInterest.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
+                val fees = editFees.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
+                val share = editShare.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
+                val floor = editFloor.text.toString().replace(',', '.').toDoubleOrNull()
+                    ?: WbCreditMath.DEFAULT_MIN_PRINCIPAL_FLOOR
+                val payDay = editPayDay.text.toString().toIntOrNull() ?: WbCreditMath.DEFAULT_PAYMENT_DAY
+                if (rate == null || rate < 0) {
+                    Toast.makeText(this, "Укажите ставку", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
+                val today = DailyInterest.startOfMoscowDay(System.currentTimeMillis())
                 if (existing == null) {
-                    val c = Credit(UUID.randomUUID().toString(), name, rate, term, payment, principal,
-                        DailyInterest.startOfMoscowDay(System.currentTimeMillis()))
+                    val c = Credit(
+                        id = UUID.randomUUID().toString(),
+                        name = name,
+                        rate = rate,
+                        termMonths = term,
+                        monthlyPayment = payment,
+                        principal = principal,
+                        lastInterestDate = today,
+                        accruedInterest = interest,
+                        accruedFees = fees,
+                        graceMode = switchGrace.isChecked,
+                        principalSharePercent = share,
+                        minPrincipalPaymentFloor = floor,
+                        paymentDay = payDay,
+                        nextMinPaymentDue = nextDueMillis,
+                        autoApplyMinPayment = switchAuto.isChecked,
+                        contractStartDate = today
+                    )
+                    if (c.nextMinPaymentDue <= 0L) {
+                        c.nextMinPaymentDue = WbCreditMath.dueDateAfterBillingMonth(
+                            WbCreditMath.yearMonthOf(today), c.paymentDay
+                        )
+                    }
                     credits.add(0, c)
-                    // A newly received loan is real debt: it immediately appears as a negative operation.
                     addTransaction(-principal, "Получен кредит: $name (тело долга)", c.id)
+                    if (interest > 0) addTransaction(-interest, "Начисл. %% (старт): $name", c.id)
+                    if (fees > 0) addTransaction(-fees, "Комиссии (старт): $name", c.id)
                     adapter.notifyItemInserted(0)
                 } else {
                     existing.name = name
@@ -150,6 +259,14 @@ class CreditCalculatorActivity : AppCompatActivity() {
                     existing.termMonths = term
                     existing.monthlyPayment = payment
                     existing.principal = principal
+                    existing.accruedInterest = interest
+                    existing.accruedFees = fees
+                    existing.graceMode = switchGrace.isChecked
+                    existing.principalSharePercent = share
+                    existing.minPrincipalPaymentFloor = floor
+                    existing.paymentDay = payDay
+                    existing.nextMinPaymentDue = nextDueMillis
+                    existing.autoApplyMinPayment = switchAuto.isChecked
                     val idx = credits.indexOfFirst { it.id == existing.id }
                     if (idx >= 0) adapter.notifyItemChanged(idx)
                 }
@@ -166,26 +283,59 @@ class CreditCalculatorActivity : AppCompatActivity() {
         val input = EditText(this).apply {
             hint = "Сумма платежа, ₽"
             inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
-            setText(if (credit.monthlyPayment > 0) credit.monthlyPayment.toString() else "")
+            val min = WbCreditMath.calculateMinPayment(credit)
+            setText(if (min.total > 0) String.format(Locale.US, "%.2f", min.total)
+            else if (credit.monthlyPayment > 0) credit.monthlyPayment.toString() else "")
             setPadding(48, 32, 48, 32)
         }
+        val preview = TextView(this).apply {
+            setPadding(48, 8, 48, 8)
+            textSize = 13f
+        }
+        fun updatePreview() {
+            val amount = input.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
+            val b = WbCreditMath.allocatePayment(
+                amount, credit.accruedFees, credit.accruedInterest, credit.principal
+            )
+            preview.text = WbCreditMath.formatAllocationRu(b) { moneyFormat.format(it) }
+        }
+        input.addTextChangedListener(SimpleTextWatcher { updatePreview() })
+        updatePreview()
+
+        val box = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            addView(input)
+            addView(preview)
+        }
+        val min = WbCreditMath.calculateMinPayment(credit)
         AlertDialog.Builder(this)
             .setTitle("Платёж: ${credit.name}")
-            .setMessage("Текущее тело: ${moneyFormat.format(credit.principal)} ₽")
-            .setView(input)
+            .setMessage(
+                "Тело ${moneyFormat.format(credit.principal)} · % ${moneyFormat.format(credit.accruedInterest)} · комис. ${moneyFormat.format(credit.accruedFees)}\n" +
+                    WbCreditMath.formatBreakdownRu(min) { moneyFormat.format(it) }
+            )
+            .setView(box)
             .setPositiveButton("Внести") { _, _ ->
                 val amount = input.text.toString().replace(',', '.').toDoubleOrNull()
                 if (amount == null || amount <= 0) {
                     Toast.makeText(this, "Введите сумму", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-                val reduce = minOf(amount, credit.principal)
-                credit.principal = (credit.principal - reduce).coerceAtLeast(0.0)
-                addTransaction(reduce, "Платёж: ${credit.name}", credit.id)
+                val allocated = WbCreditMath.allocatePayment(
+                    amount, credit.accruedFees, credit.accruedInterest, credit.principal
+                )
+                WbCreditMath.applyBreakdown(credit, allocated)
+                val note = "Платёж: ${credit.name} · " +
+                    WbCreditMath.formatAllocationRu(allocated) { moneyFormat.format(it) }
+                addTransaction(allocated.total, note, credit.id)
                 saveCredits()
                 val idx = credits.indexOfFirst { it.id == credit.id }
                 if (idx >= 0) adapter.notifyItemChanged(idx)
-                Toast.makeText(this, "Платёж ${moneyFormat.format(reduce)} ₽ внесён", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Платёж ${moneyFormat.format(allocated.total)} ₽ внесён", Toast.LENGTH_SHORT).show()
+            }
+            .setNeutralButton("Мин.") { _, _ ->
+                input.setText(String.format(Locale.US, "%.2f", min.total))
+                updatePreview()
             }
             .setNegativeButton("Отмена", null)
             .show()
@@ -194,7 +344,7 @@ class CreditCalculatorActivity : AppCompatActivity() {
     private fun confirmDelete(credit: Credit) {
         AlertDialog.Builder(this)
             .setTitle("Удалить «${credit.name}»?")
-            .setMessage("Операции в журнале останутся, но привязка к кредиту сохранится только как название.")
+            .setMessage("Операции в журнале останутся.")
             .setPositiveButton("Удалить") { _, _ ->
                 val idx = credits.indexOfFirst { it.id == credit.id }
                 if (idx >= 0) {
@@ -209,48 +359,16 @@ class CreditCalculatorActivity : AppCompatActivity() {
     }
 
     private fun addTransaction(amount: Double, note: String, creditId: String) {
-        val json = prefs.getString("transactions", "[]") ?: "[]"
-        val arr = try { JSONArray(json) } catch (_: Exception) { JSONArray() }
-        val o = JSONObject()
-        o.put("id", UUID.randomUUID().toString())
-        o.put("amount", amount)
-        o.put("timestamp", System.currentTimeMillis())
-        o.put("note", note)
-        o.put("creditId", creditId)
-        val newArr = JSONArray()
-        newArr.put(o)
-        for (i in 0 until arr.length()) newArr.put(arr.get(i))
-        prefs.edit().putString("transactions", newArr.toString()).apply()
+        val txs = mutableListOf<Transaction>()
+        Persistence.loadTransactions(prefs, txs)
+        txs.add(0, Transaction(UUID.randomUUID().toString(), amount, System.currentTimeMillis(), note, creditId))
+        Persistence.saveTransactions(prefs, txs)
     }
 
-    private fun saveCredits() {
-        val arr = JSONArray()
-        credits.forEach { c ->
-            val o = JSONObject()
-            o.put("id", c.id)
-            o.put("name", c.name)
-            o.put("rate", c.rate)
-            o.put("termMonths", c.termMonths)
-            o.put("monthlyPayment", c.monthlyPayment)
-            o.put("principal", c.principal)
-            o.put("lastInterestDate", c.lastInterestDate)
-            arr.put(o)
-        }
-        prefs.edit().putString("credits", arr.toString()).apply()
-    }
+    private fun saveCredits() = Persistence.saveCredits(prefs, credits)
 
     private fun loadCredits() {
-        credits.clear()
-        val json = prefs.getString("credits", "[]") ?: "[]"
-        try {
-            val arr = JSONArray(json)
-            for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
-                credits.add(Credit(o.getString("id"), o.getString("name"), o.getDouble("rate"),
-                    o.getInt("termMonths"), o.getDouble("monthlyPayment"), o.getDouble("principal"),
-                    o.optLong("lastInterestDate", 0L)))
-            }
-        } catch (e: Exception) { e.printStackTrace() }
+        Persistence.loadCredits(prefs, credits)
         adapter.notifyDataSetChanged()
     }
 
@@ -263,4 +381,11 @@ class CreditCalculatorActivity : AppCompatActivity() {
             recycler.visibility = View.VISIBLE
         }
     }
+}
+
+/** Минимальный TextWatcher без boilerplate. */
+class SimpleTextWatcher(private val onChange: () -> Unit) : android.text.TextWatcher {
+    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+    override fun afterTextChanged(s: android.text.Editable?) = onChange()
 }

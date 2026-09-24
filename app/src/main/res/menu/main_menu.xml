@@ -11,4 +11,9 @@
         android:title="Накопительный счёт"
         android:icon="@android:drawable/ic_menu_save"
         app:showAsAction="never" />
+    <item
+        android:id="@+id/menu_subscriptions"
+        android:title="Подписки"
+        android:icon="@android:drawable/ic_menu_my_calendar"
+        app:showAsAction="never" />
 </menu>
