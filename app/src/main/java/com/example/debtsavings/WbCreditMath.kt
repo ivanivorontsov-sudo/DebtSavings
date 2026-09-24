@@ -20,11 +20,9 @@ import kotlin.math.min
  *   daily = principal * (annualRate/100) / 365
  *   accruedInterest += daily * days
  *
- * Мин. платёж:
- *   feesPart      = accruedFees
- *   interestPart  ≈ accruedInterest / 12   (1/12 накопленных % после срыва грейса)
- *   principalPart = 0, либо roundDown100(principal * share%/100) с полом floor (500 ₽)
- *   total = fees + interest + principal
+ * Мин. / обязательный платёж = [Credit.monthlyPayment] (сумму задаёт пользователь).
+ * Разбивка текущей суммы: комиссии → проценты → тело (allocatePayment).
+ * Если monthlyPayment не задан — к погашению только комиссии + начисл. % (тело 0).
  *
  * Порядок погашения суммы X: комиссии → проценты → тело.
  */
@@ -68,18 +66,23 @@ object WbCreditMath {
     }
 
     /**
-     * Обязательный (мин.) платёж по текущим остаткам.
-     * interestPart ≈ 1/12 накопленных процентов (приближение тарифа WB).
+     * Обязательный платёж = [Credit.monthlyPayment] (задаёт пользователь).
+     * Разбивка «как сейчас уйдёт сумма»: комиссии → % → тело.
+     * Если сумма не задана — только накопленные комиссии и проценты (тело 0).
      */
     fun calculateMinPayment(credit: Credit): PaymentBreakdown {
+        val amount = credit.monthlyPayment.coerceAtLeast(0.0)
+        if (amount > 0.01) {
+            return allocatePayment(
+                amount,
+                credit.accruedFees,
+                credit.accruedInterest,
+                credit.principal
+            )
+        }
         val fees = credit.accruedFees.coerceAtLeast(0.0)
-        val interest = (credit.accruedInterest.coerceAtLeast(0.0) / 12.0)
-        val principal = principalShareAmount(
-            credit.principal,
-            credit.principalSharePercent,
-            credit.minPrincipalPaymentFloor
-        )
-        return PaymentBreakdown(fees = fees, interest = interest, principal = principal)
+        val interest = credit.accruedInterest.coerceAtLeast(0.0)
+        return PaymentBreakdown(fees = fees, interest = interest, principal = 0.0)
     }
 
     /**
@@ -154,10 +157,11 @@ object WbCreditMath {
     }
 
     fun formatBreakdownRu(b: PaymentBreakdown, money: (Double) -> String): String {
+        // Только когда нет суммы платежа и нет комиссий/% .
         if (b.total <= 0.01) return "нет обязательного платежа"
         val lines = mutableListOf("Мин. платёж: ${money(b.total)} ₽")
         if (b.fees > 0.01) lines.add("  · комиссии: ${money(b.fees)} ₽")
-        if (b.interest > 0.01) lines.add("  · проценты (≈1/12): ${money(b.interest)} ₽")
+        if (b.interest > 0.01) lines.add("  · проценты: ${money(b.interest)} ₽")
         if (b.principal > 0.01) lines.add("  · тело: ${money(b.principal)} ₽")
         return lines.joinToString("\n")
     }

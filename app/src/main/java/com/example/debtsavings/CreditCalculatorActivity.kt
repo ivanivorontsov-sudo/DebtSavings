@@ -56,7 +56,7 @@ class CreditListAdapter(
         holder.name.text = c.name
         val grace = if (c.graceMode) "грейс" else "%% ${c.rate}"
         holder.details.text =
-            "$grace · доля тела ${c.principalSharePercent.toInt()}% · авто-мин: ${if (c.autoApplyMinPayment) "да" else "нет"}"
+            "$grace · авто-мин: ${if (c.autoApplyMinPayment) "да" else "нет"}"
         val balParts = mutableListOf<String>()
         if (c.principal > 0.01) balParts.add("Тело: ${moneyFormat.format(c.principal)} ₽")
         if (c.accruedInterest > 0.01) balParts.add("%: ${moneyFormat.format(c.accruedInterest)} ₽")
@@ -66,9 +66,8 @@ class CreditListAdapter(
         val due = if (c.nextMinPaymentDue > 0)
             "Срок: ${dateFormat.format(Date(c.nextMinPaymentDue))}"
         else "Срок: —"
-        val hint = if (min.interest > 0.01) "\n(%% в мин. ≈ 1/12 накопленных)" else ""
         holder.minPayment.text =
-            WbCreditMath.formatBreakdownRu(min) { moneyFormat.format(it) } + "\n$due$hint"
+            WbCreditMath.formatBreakdownRu(min) { moneyFormat.format(it) } + "\n$due"
         holder.btnPay.setOnClickListener { onPay(c) }
         holder.btnEdit.setOnClickListener { onEdit(c) }
         holder.btnDelete.setOnClickListener { onDelete(c) }
@@ -192,18 +191,16 @@ class CreditCalculatorActivity : AppCompatActivity() {
         }
 
         fun preview() {
+            val pay = editPayment.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
             val p = editPrincipal.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
             val ai = editInterest.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
             val af = editFees.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
-            val share = editShare.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
-            val floor = editFloor.text.toString().replace(',', '.').toDoubleOrNull()
-                ?: WbCreditMath.DEFAULT_MIN_PRINCIPAL_FLOOR
-            val tmp = Credit("x", "x", 0.0, 1, 0.0, p, 0L, ai, af, false, share, floor)
+            val tmp = Credit("x", "x", 0.0, 1, pay, p, 0L, ai, af, switchGrace.isChecked)
             val min = WbCreditMath.calculateMinPayment(tmp)
             textCalc.text = WbCreditMath.formatBreakdownRu(min) { moneyFormat.format(it) } +
-                "\nФормула: комис. + (начисл.% / 12) + доля тела (floor до 100 ₽, мин. пол)"
+                "\nСумма платежа → комис. → % → тело"
         }
-        listOf(editPrincipal, editInterest, editFees, editShare, editFloor).forEach {
+        listOf(editPayment, editPrincipal, editInterest, editFees).forEach {
             it.setOnFocusChangeListener { _, _ -> preview() }
         }
 

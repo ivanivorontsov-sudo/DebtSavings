@@ -14,7 +14,7 @@ data class Credit(
     var name: String,
     var rate: Double,                 // % годовых (annualRate)
     var termMonths: Int,
-    var monthlyPayment: Double,       // справочный/ручной платёж (не мин.)
+    var monthlyPayment: Double,       // обязательный/авто платёж (сумму задаёт пользователь)
     var principal: Double,            // тело долга
     var lastInterestDate: Long,       // начало дня последней начитки % / комиссий
     var accruedInterest: Double = 0.0,

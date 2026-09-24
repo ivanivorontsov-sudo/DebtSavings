@@ -18,10 +18,10 @@ import java.util.concurrent.TimeUnit
  *   — простые % actual/365: accruedInterest += principal * rate/100/365 * days
  *   — тело не увеличивается.
  *
- * Авто-мин. платёж (autoApplyMinPayment):
+ * Авто-платёж (autoApplyMinPayment):
  *   если сегодня >= nextMinPaymentDue и период ещё не учтён —
- *   списываем calculateMinPayment() в порядке комиссии→%→тело,
- *   пишем транзакцию с разбивкой, двигаем срок.
+ *   списываем monthlyPayment (разбивка комиссии→%→тело),
+ *   пишем транзакцию, двигаем срок. Сумму задаёт пользователь.
  */
 object DailyInterest {
     private const val MOSCOW_TZ = "Europe/Moscow"
@@ -210,7 +210,7 @@ object DailyInterest {
         WbCreditMath.applyBreakdown(credit, allocated)
         val graceBroken = WbCreditMath.afterPartialPayment(credit)
 
-        var note = "Авто мин. платёж: ${credit.name} · " +
+        var note = "Авто платёж: ${credit.name} · " +
             WbCreditMath.formatAllocationRu(allocated) { String.format(java.util.Locale("ru", "RU"), "%.2f", it) }
         if (graceBroken) note += " · грейс снят — дальше %% на тело"
         transactions.add(
@@ -219,8 +219,7 @@ object DailyInterest {
         )
 
         credit.lastMinPaymentPeriodKey = periodKey
-        // monthlyPayment как ориентир обновляем
-        credit.monthlyPayment = min.total
+        // monthlyPayment — сумма, заданная пользователем; не перезаписываем
         advanceDue(credit, periodKey)
         return true
     }
