@@ -112,11 +112,11 @@ object WbCreditMath {
     }
 
     /**
-     * Срыв грейса после неполного погашения.
-     * Мин. платёж ≠ полное погашение: если после платежа остался долг
-     * (тело + % + комиссии) > 0.01 — [graceMode] снимается, дальше начисляются %%.
-     * @return true, если грейс был снят этим вызовом
+     * Раньше срывал грейс после неполного платежа.
+     * С v1.1.3 не вызывается: грейс только вручную («Беспроцентный период»).
+     * Оставлено на случай совместимости / тестов.
      */
+    @Suppress("unused")
     fun afterPartialPayment(credit: Credit): Boolean {
         if (!credit.graceMode) return false
         val remaining = credit.principal + credit.accruedInterest + credit.accruedFees

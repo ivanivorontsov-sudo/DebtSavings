@@ -170,10 +170,8 @@ class MainActivity : AppCompatActivity() {
                 value, credit.accruedFees, credit.accruedInterest, credit.principal
             )
             WbCreditMath.applyBreakdown(credit, allocated)
-            val graceBroken = WbCreditMath.afterPartialPayment(credit)
-            var note = "Платёж: ${credit.name} · " +
+            val note = "Платёж: ${credit.name} · " +
                 WbCreditMath.formatAllocationRu(allocated) { moneyFormat.format(it) }
-            if (graceBroken) note += " · грейс снят — дальше %% на тело"
             transactions.add(0, Transaction(UUID.randomUUID().toString(), allocated.total, System.currentTimeMillis(), note, creditId))
             saveCredits()
         } else if (credit != null && !positive) {

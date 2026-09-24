@@ -254,6 +254,9 @@ class CreditCalculatorActivity : AppCompatActivity() {
                     if (fees > 0) addTransaction(-fees, "Комиссии (старт): $name", c.id)
                     adapter.notifyItemInserted(0)
                 } else {
+                    val oldPrincipal = existing.principal
+                    val oldInterest = existing.accruedInterest
+                    val oldFees = existing.accruedFees
                     existing.name = name
                     existing.rate = rate
                     existing.termMonths = term
@@ -267,6 +270,34 @@ class CreditCalculatorActivity : AppCompatActivity() {
                     existing.paymentDay = payDay
                     existing.nextMinPaymentDue = nextDueMillis
                     existing.autoApplyMinPayment = switchAuto.isChecked
+                    // Синхронизация журнала с правками тела / % / комиссий
+                    val dPrincipal = principal - oldPrincipal
+                    if (kotlin.math.abs(dPrincipal) > 0.01) {
+                        val sign = if (dPrincipal > 0) "+" else ""
+                        addTransaction(
+                            -dPrincipal,
+                            "Корректировка тела: $name ($sign${moneyFormat.format(dPrincipal)} ₽)",
+                            existing.id
+                        )
+                    }
+                    val dInterest = interest - oldInterest
+                    if (kotlin.math.abs(dInterest) > 0.01) {
+                        val sign = if (dInterest > 0) "+" else ""
+                        addTransaction(
+                            -dInterest,
+                            "Корректировка %: $name ($sign${moneyFormat.format(dInterest)} ₽)",
+                            existing.id
+                        )
+                    }
+                    val dFees = fees - oldFees
+                    if (kotlin.math.abs(dFees) > 0.01) {
+                        val sign = if (dFees > 0) "+" else ""
+                        addTransaction(
+                            -dFees,
+                            "Корректировка комиссий: $name ($sign${moneyFormat.format(dFees)} ₽)",
+                            existing.id
+                        )
+                    }
                     val idx = credits.indexOfFirst { it.id == existing.id }
                     if (idx >= 0) adapter.notifyItemChanged(idx)
                 }
@@ -330,10 +361,8 @@ class CreditCalculatorActivity : AppCompatActivity() {
                     amount, credit.accruedFees, credit.accruedInterest, credit.principal
                 )
                 WbCreditMath.applyBreakdown(credit, allocated)
-                val graceBroken = WbCreditMath.afterPartialPayment(credit)
-                var note = "Платёж: ${credit.name} · " +
+                val note = "Платёж: ${credit.name} · " +
                     WbCreditMath.formatAllocationRu(allocated) { moneyFormat.format(it) }
-                if (graceBroken) note += " · грейс снят — дальше %% на тело"
                 addTransaction(allocated.total, note, credit.id)
                 saveCredits()
                 val idx = credits.indexOfFirst { it.id == credit.id }

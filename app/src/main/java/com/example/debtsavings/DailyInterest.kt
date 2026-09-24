@@ -22,6 +22,9 @@ import java.util.concurrent.TimeUnit
  *   если сегодня >= nextMinPaymentDue и период ещё не учтён —
  *   списываем monthlyPayment (разбивка комиссии→%→тело),
  *   пишем транзакцию, двигаем срок. Сумму задаёт пользователь.
+ *
+ * Грейс (graceMode) — только ручной переключатель в диалоге кредита;
+ * платежи (в т.ч. авто-мин.) грейс НЕ срывают.
  */
 object DailyInterest {
     private const val MOSCOW_TZ = "Europe/Moscow"
@@ -37,12 +40,6 @@ object DailyInterest {
         var changed = false
 
         for (credit in credits) {
-            // Восстановление после v1.1: мин. платёж уже был при активном грейсе → срыв грейса.
-            if (credit.graceMode && credit.principal > 0.01 && credit.lastMinPaymentPeriodKey != 0) {
-                credit.graceMode = false
-                changed = true
-            }
-
             if (credit.lastInterestDate == 0L) {
                 credit.lastInterestDate = today
                 if (credit.contractStartDate == 0L) {
@@ -208,11 +205,9 @@ object DailyInterest {
             credit.principal
         )
         WbCreditMath.applyBreakdown(credit, allocated)
-        val graceBroken = WbCreditMath.afterPartialPayment(credit)
 
-        var note = "Авто платёж: ${credit.name} · " +
+        val note = "Авто платёж: ${credit.name} · " +
             WbCreditMath.formatAllocationRu(allocated) { String.format(java.util.Locale("ru", "RU"), "%.2f", it) }
-        if (graceBroken) note += " · грейс снят — дальше %% на тело"
         transactions.add(
             0,
             Transaction(UUID.randomUUID().toString(), allocated.total, today, note, credit.id)
