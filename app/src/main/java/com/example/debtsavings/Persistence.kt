@@ -89,6 +89,8 @@ object Persistence {
         put("contractStartDate", c.contractStartDate)
         put("lastFeeYearMonth", c.lastFeeYearMonth)
         put("lastMinPaymentPeriodKey", c.lastMinPaymentPeriodKey)
+        put("endDate", c.endDate)
+        put("recalcPaymentAfterPrepay", c.recalcPaymentAfterPrepay)
     }
 
     /** Миграция: отсутствующие поля → безопасные значения по умолчанию. */
@@ -110,7 +112,10 @@ object Persistence {
         autoApplyMinPayment = o.optBoolean("autoApplyMinPayment", true),
         contractStartDate = o.optLong("contractStartDate", 0L),
         lastFeeYearMonth = o.optInt("lastFeeYearMonth", 0),
-        lastMinPaymentPeriodKey = o.optInt("lastMinPaymentPeriodKey", 0)
+        lastMinPaymentPeriodKey = o.optInt("lastMinPaymentPeriodKey", 0),
+        // v1.1.7: аннуитет (нет в старом JSON → без графика, пересчёт по умолчанию вкл.)
+        endDate = o.optLong("endDate", 0L),
+        recalcPaymentAfterPrepay = o.optBoolean("recalcPaymentAfterPrepay", true)
     )
 
     fun loadSubscriptions(prefs: SharedPreferences, target: MutableList<Subscription>) {
@@ -185,8 +190,10 @@ object Persistence {
         if (credits.isNotEmpty()) return false
         if (prefs.getBoolean(DEFAULTS_SEEDED_KEY, false)) return false
 
-        val today = DailyInterest.startOfMoscowDay(System.currentTimeMillis())
-        // Стабильные id для сидов; termMonths: 12 общим, 58 для WB-подобных
+        val now = System.currentTimeMillis()
+        val today = DailyInterest.startOfMoscowDay(now)
+        // Стабильные id для сидов; termMonths: 12 общим, 58 для WB-подобных.
+        // Вб_1 / Вб_2 — аннуитет: дата окончания / день платежа / пересчёт (Migrations.applyWbAnnuityDefaults)
         val seeds = listOf(
             SeedSpec("seed-yandex", "Яндекс Супер Сплит", 4318.1, 0.0, true, 0.0, 0.0, 12),
             SeedSpec("seed-wb", "WB Кэш", 60000.0, 59.8, true, 60000.0, 0.0, 58),
@@ -218,7 +225,7 @@ object Persistence {
                     paymentDay = 25,
                     autoApplyMinPayment = true,
                     contractStartDate = today
-                )
+                ).also { Migrations.applyWbAnnuityDefaults(it, now) }
             )
             seedTx.add(
                 Transaction(

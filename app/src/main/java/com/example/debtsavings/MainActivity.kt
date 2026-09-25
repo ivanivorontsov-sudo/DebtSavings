@@ -133,6 +133,8 @@ class MainActivity : AppCompatActivity() {
                     try {
                         DataBackup.apply(prefs, snap)
                         loadAll()
+                        // Старый бэкап без графика Вб_1/Вб_2 → проставить (только добавляет поля)
+                        Migrations.runAll(prefs, credits, transactions, force = true)
                         applyDailyInterestIfNeeded()
                         setupCreditSpinner()
                         updateUI()
@@ -191,6 +193,7 @@ class MainActivity : AppCompatActivity() {
         }
         loadAll()
         Persistence.ensureDefaultSeed(prefs, credits, transactions)
+        Migrations.runAll(prefs, credits, transactions)
         applyDailyInterestIfNeeded()
         setupCreditSpinner()
         updateUI()
@@ -261,16 +264,14 @@ class MainActivity : AppCompatActivity() {
         val creditId = selectedCreditId
         val credit = creditId?.let { id -> credits.find { it.id == id } }
         if (credit != null && positive) {
-            val allocated = WbCreditMath.allocatePayment(
-                value, credit.accruedFees, credit.accruedInterest, credit.principal
-            )
-            WbCreditMath.applyBreakdown(credit, allocated)
-            val note = "Платёж: ${credit.name} · " +
-                WbCreditMath.formatAllocationRu(allocated) { moneyFormat.format(it) }
-            transactions.add(0, Transaction(UUID.randomUUID().toString(), allocated.total, System.currentTimeMillis(), note, creditId))
+            // Аннуитет (дата окончания): не в плановый день → весь платёж в тело
+            val now = System.currentTimeMillis()
+            val res = Annuity.applyPayment(credit, value, null, now) { moneyFormat.format(it) }
+            transactions.add(0, Transaction(UUID.randomUUID().toString(), res.breakdown.total, now, res.note, creditId))
             saveCredits()
         } else if (credit != null && !positive) {
             credit.principal += value
+            Annuity.recompute(credit)
             transactions.add(
                 0,
                 Transaction(UUID.randomUUID().toString(), -value, System.currentTimeMillis(), "Долг (тело): ${credit.name}", creditId)
@@ -322,31 +323,7 @@ class MainActivity : AppCompatActivity() {
      * для «Проценты:» / «Комиссия грейса» — уменьшаем соответствующие поля;
      * иначе — как раньше только тело.
      */
-    private fun reverseEffect(tx: Transaction) {
-        val credit = tx.creditId?.let { id -> credits.find { it.id == id } } ?: return
-        val note = tx.note
-        when {
-            note.startsWith("Проценты:") || note.contains("начислены отдельно") -> {
-                credit.accruedInterest = (credit.accruedInterest + tx.amount).coerceAtLeast(0.0) // tx.amount отрицательный
-                // tx.amount is negative for interest accrual; adding it reduces accruedInterest
-                // Wait: accruedInterest was increased by |amount|, so reverse: accruedInterest -= |amount|
-                // tx.amount is -interest, so accruedInterest += tx.amount  (= subtract interest) — correct if we stored positive in field
-            }
-            note.startsWith("Комиссия грейса") -> {
-                credit.accruedFees = (credit.accruedFees + tx.amount).coerceAtLeast(0.0)
-            }
-            note.contains("комиссии") && note.contains("тело") && tx.amount > 0 -> {
-                // Best-effort: put whole payment back onto principal (manual edit can fix split)
-                credit.principal += tx.amount
-            }
-            tx.amount > 0 -> credit.principal += tx.amount
-            else -> {
-                if (!note.startsWith("Проценты") && !note.startsWith("Комиссия")) {
-                    credit.principal = (credit.principal + tx.amount).coerceAtLeast(0.0)
-                }
-            }
-        }
-    }
+    private fun reverseEffect(tx: Transaction) = Annuity.reverseEffect(credits, tx)
 
     private fun getBalance(): Double = transactions.sumOf { it.amount }
 
@@ -451,7 +428,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun saveTransactions() = Persistence.saveTransactions(prefs, transactions)
     private fun loadTransactions() = Persistence.loadTransactions(prefs, transactions)
-    private fun saveCredits() = Persistence.saveCredits(prefs, credits)
+    private fun saveCredits() {
+        Persistence.saveCredits(prefs, credits)
+        PaymentReminderScheduler.scheduleNext(this)
+    }
     private fun loadCredits() {
         Persistence.loadCredits(prefs, credits)
         adapter.notifyDataSetChanged()

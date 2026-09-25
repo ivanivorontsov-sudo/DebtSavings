@@ -8,6 +8,11 @@ package com.example.debtsavings
  * [accruedFees] — комиссии (в т.ч. за беспроцентный период).
  * [rate] — годовая ставка, % (по умолчанию WB: 59.8).
  * [graceMode] — беспроцентный период: вместо % начисляется комиссия.
+ * [paymentDay] — день платежа (число месяца). Для аннуитетных кредитов — день планового платежа.
+ * [endDate] — дата окончания (погашения) кредита, millis начала дня МСК; 0 = не задана.
+ *   Если задана — кредит по графику (аннуитет): платёж не в плановый день → весь в тело.
+ * [recalcPaymentAfterPrepay] — пересчитывать ежемесячный платёж после изменения тела
+ *   (досрочки, правки). Работает только при заданной [endDate].
  */
 data class Credit(
     val id: String,
@@ -27,7 +32,9 @@ data class Credit(
     var autoApplyMinPayment: Boolean = true,
     var contractStartDate: Long = 0L,          // дата договора (пропуск комиссии в 1-й мес. после 21-го)
     var lastFeeYearMonth: Int = 0,             // YYYYMM последней начисленной grace-комиссии
-    var lastMinPaymentPeriodKey: Int = 0       // YYYYMM расчётного периода, за который мин. платёж уже учтён
+    var lastMinPaymentPeriodKey: Int = 0,      // YYYYMM расчётного периода, за который мин. платёж уже учтён
+    var endDate: Long = 0L,                    // дата окончания кредита (МСК, начало дня); 0 = нет графика
+    var recalcPaymentAfterPrepay: Boolean = true // аннуитет: пересчёт платежа после досрочки (при endDate > 0)
 )
 
 data class Transaction(

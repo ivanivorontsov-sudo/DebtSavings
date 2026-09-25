@@ -177,6 +177,19 @@ class CalendarActivity : AppCompatActivity() {
     }
 
     private fun projectCreditDues(c: Credit, monthsAhead: Int): List<Long> {
+        if (Annuity.hasSchedule(c)) {
+            // Аннуитет: день платежа (без обрезки до 28), не позже даты окончания
+            val res = mutableListOf<Long>()
+            var d = if (c.nextMinPaymentDue > 0L) DailyInterest.startOfMoscowDay(c.nextMinPaymentDue)
+            else Annuity.nextScheduledOnOrAfter(System.currentTimeMillis(), c.paymentDay)
+            val end = DailyInterest.startOfMoscowDay(c.endDate)
+            for (i in 0..monthsAhead) {
+                if (d > end && res.isNotEmpty()) break
+                res.add(d)
+                d = Annuity.advanceDue(c, d)
+            }
+            return res
+        }
         val out = mutableListOf<Long>()
         val seen = mutableSetOf<Long>()
         if (c.nextMinPaymentDue > 0L) {

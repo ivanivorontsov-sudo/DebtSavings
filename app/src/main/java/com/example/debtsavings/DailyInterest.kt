@@ -21,7 +21,12 @@ import java.util.concurrent.TimeUnit
  * Авто-платёж (autoApplyMinPayment):
  *   если сегодня >= nextMinPaymentDue и период ещё не учтён —
  *   списываем monthlyPayment (разбивка комиссии→%→тело),
- *   пишем транзакцию, двигаем срок. Сумму задаёт пользователь.
+ *   пишем транзакцию, двигаем срок. Сумму задаёт пользователь;
+ *   для аннуитета (endDate) после платежа monthlyPayment пересчитывается ([Annuity]).
+ *
+ * Аннуитет (endDate): досрочный платёж сразу уменьшает тело, поэтому % за следующие дни
+ * начисляются уже на новое тело; начисленные % копятся отдельно и списываются только
+ * обязательным платежом в плановую дату (nextMinPaymentDue), затем платёж пересчитывается.
  *
  * Грейс (graceMode) — только ручной переключатель в диалоге кредита;
  * платежи (в т.ч. авто-мин.) грейс НЕ срывают.
@@ -35,8 +40,16 @@ object DailyInterest {
         prefs: SharedPreferences,
         transactions: MutableList<Transaction>,
         credits: MutableList<Credit>
+    ): Boolean = applyIfNeeded(prefs, transactions, credits, System.currentTimeMillis())
+
+    /** [now] — для тестов; в приложении — текущее время. */
+    fun applyIfNeeded(
+        prefs: SharedPreferences,
+        transactions: MutableList<Transaction>,
+        credits: MutableList<Credit>,
+        now: Long
     ): Boolean {
-        val today = startOfMoscowDay(System.currentTimeMillis())
+        val today = startOfMoscowDay(now)
         var changed = false
 
         for (credit in credits) {
@@ -52,7 +65,23 @@ object DailyInterest {
 
             val days = TimeUnit.MILLISECONDS.toDays(today - credit.lastInterestDate).toInt()
             if (days > 0) {
-                if (accrueAcrossDays(credit, transactions, credit.lastInterestDate, today)) changed = true
+                var from = credit.lastInterestDate
+                // Аннуитет: пропущенные плановые даты — начисляем % до даты платежа, списываем
+                // обязательный платёж в эту дату, дальше % идут уже на уменьшенное тело.
+                if (Annuity.hasSchedule(credit) && credit.autoApplyMinPayment) {
+                    var guard = 0
+                    while (guard++ < 240 && credit.nextMinPaymentDue > 0L) {
+                        val due = startOfMoscowDay(credit.nextMinPaymentDue)
+                        if (due < from || due > today) break
+                        if (accrueAcrossDays(credit, transactions, from, due)) changed = true
+                        from = due
+                        credit.lastInterestDate = due
+                        if (!autoApplyMinIfDue(credit, transactions, due)) break
+                        changed = true
+                    }
+                }
+                // % за дни — на текущее тело (после досрочек уже уменьшенное)
+                if (accrueAcrossDays(credit, transactions, from, today)) changed = true
                 credit.lastInterestDate = today
                 changed = true
             }
@@ -137,10 +166,12 @@ object DailyInterest {
                     }
                     credit.lastFeeYearMonth = billingYm
                     // Срок оплаты за расчётный месяц = конец месяца + paymentDay дней
-                    credit.nextMinPaymentDue = WbCreditMath.dueDateAfterBillingMonth(
-                        billingYm,
-                        credit.paymentDay
-                    )
+                    if (!Annuity.hasSchedule(credit)) {
+                        credit.nextMinPaymentDue = WbCreditMath.dueDateAfterBillingMonth(
+                            billingYm,
+                            credit.paymentDay
+                        )
+                    }
                     changed = true
                 }
             }
@@ -183,11 +214,15 @@ object DailyInterest {
         if (today < startOfMoscowDay(credit.nextMinPaymentDue)) return false
 
         // Период = расчётный месяц, за который наступил срок.
-        val dueCal = Calendar.getInstance(TimeZone.getTimeZone(MOSCOW_TZ))
-        dueCal.timeInMillis = credit.nextMinPaymentDue
-        // Расчётный месяц ≈ месяц due минус paymentDay дней (конец billing month).
-        dueCal.add(Calendar.DAY_OF_MONTH, -credit.paymentDay.coerceIn(1, 28))
-        val periodKey = dueCal.get(Calendar.YEAR) * 100 + (dueCal.get(Calendar.MONTH) + 1)
+        val periodKey = if (Annuity.hasSchedule(credit)) {
+            Annuity.periodKeyForDue(credit.nextMinPaymentDue)
+        } else {
+            val dueCal = Calendar.getInstance(TimeZone.getTimeZone(MOSCOW_TZ))
+            dueCal.timeInMillis = credit.nextMinPaymentDue
+            // Расчётный месяц ≈ месяц due минус paymentDay дней (конец billing month).
+            dueCal.add(Calendar.DAY_OF_MONTH, -credit.paymentDay.coerceIn(1, 28))
+            dueCal.get(Calendar.YEAR) * 100 + (dueCal.get(Calendar.MONTH) + 1)
+        }
 
         if (periodKey == credit.lastMinPaymentPeriodKey) return false
 
@@ -206,26 +241,36 @@ object DailyInterest {
         )
         WbCreditMath.applyBreakdown(credit, allocated)
 
+        credit.lastMinPaymentPeriodKey = periodKey
+        // monthlyPayment — сумма пользователя; для аннуитета (endDate) пересчитывается по новому телу
+        advanceDue(credit, periodKey)
+        val recalculated = allocated.principal > 0.0 && Annuity.recompute(credit, today)
+        val money: (Double) -> String = { String.format(java.util.Locale("ru", "RU"), "%.2f", it) }
         val note = "Авто платёж: ${credit.name} · " +
-            WbCreditMath.formatAllocationRu(allocated) { String.format(java.util.Locale("ru", "RU"), "%.2f", it) }
+            WbCreditMath.formatAllocationRu(allocated, money) +
+            (if (recalculated) " · новый платёж ${money(credit.monthlyPayment)} ₽" else "")
         transactions.add(
             0,
             Transaction(UUID.randomUUID().toString(), allocated.total, today, note, credit.id)
         )
-
-        credit.lastMinPaymentPeriodKey = periodKey
-        // monthlyPayment — сумма, заданная пользователем; не перезаписываем
-        advanceDue(credit, periodKey)
         return true
     }
 
     private fun advanceDue(credit: Credit, appliedPeriodKey: Int) {
+        if (Annuity.hasSchedule(credit)) {
+            credit.nextMinPaymentDue = Annuity.advanceDue(credit, credit.nextMinPaymentDue)
+            return
+        }
         val nextPeriod = WbCreditMath.nextYearMonth(appliedPeriodKey)
         credit.nextMinPaymentDue = WbCreditMath.dueDateAfterBillingMonth(nextPeriod, credit.paymentDay)
     }
 
     private fun ensureNextDue(credit: Credit, today: Long) {
         if (credit.nextMinPaymentDue > 0L) return
+        if (Annuity.hasSchedule(credit)) {
+            credit.nextMinPaymentDue = Annuity.nextScheduledOnOrAfter(today, credit.paymentDay)
+            return
+        }
         val ym = WbCreditMath.yearMonthOf(today)
         credit.nextMinPaymentDue = WbCreditMath.dueDateAfterBillingMonth(ym, credit.paymentDay)
     }

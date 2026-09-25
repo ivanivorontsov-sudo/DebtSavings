@@ -71,25 +71,5 @@ class JournalActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun reverseEffect(tx: Transaction) {
-        val credit = tx.creditId?.let { id -> credits.find { it.id == id } } ?: return
-        val note = tx.note
-        when {
-            note.startsWith("Проценты:") || note.contains("начислены отдельно") -> {
-                credit.accruedInterest = (credit.accruedInterest + tx.amount).coerceAtLeast(0.0)
-            }
-            note.startsWith("Комиссия грейса") -> {
-                credit.accruedFees = (credit.accruedFees + tx.amount).coerceAtLeast(0.0)
-            }
-            note.contains("комиссии") && note.contains("тело") && tx.amount > 0 -> {
-                credit.principal += tx.amount
-            }
-            tx.amount > 0 -> credit.principal += tx.amount
-            else -> {
-                if (!note.startsWith("Проценты") && !note.startsWith("Комиссия")) {
-                    credit.principal = (credit.principal + tx.amount).coerceAtLeast(0.0)
-                }
-            }
-        }
-    }
+    private fun reverseEffect(tx: Transaction) = Annuity.reverseEffect(credits, tx)
 }

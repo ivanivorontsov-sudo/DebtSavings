@@ -11,6 +11,7 @@ class DebtSavingsApplication : Application() {
         Persistence.loadTransactions(prefs, transactions)
         Persistence.loadCredits(prefs, credits)
         Persistence.ensureDefaultSeed(prefs, credits, transactions)
+        Migrations.runAll(prefs, credits, transactions)
         DailyInterest.applyIfNeeded(prefs, transactions, credits)
         InterestAlarmScheduler.scheduleNext(this)
         SubscriptionNotifier.ensureChannel(this)

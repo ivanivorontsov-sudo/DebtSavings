@@ -36,7 +36,9 @@ class CreditListAdapter(
         maximumFractionDigits = 2
         minimumFractionDigits = 0
     }
-    private val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale("ru", "RU"))
+    private val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale("ru", "RU")).apply {
+        timeZone = TimeZone.getTimeZone("Europe/Moscow")
+    }
 
     class VH(v: View) : RecyclerView.ViewHolder(v) {
         val name: TextView = v.findViewById(R.id.creditName)
@@ -55,8 +57,12 @@ class CreditListAdapter(
         val c = items[position]
         holder.name.text = c.name
         val grace = if (c.graceMode) "грейс" else "%% ${c.rate}"
+        val schedule = if (Annuity.hasSchedule(c))
+            " · до ${dateFormat.format(Date(c.endDate))}, платёж ${c.paymentDay}-го" +
+                (if (c.recalcPaymentAfterPrepay) " (пересчёт)" else "")
+        else ""
         holder.details.text =
-            "$grace · авто-мин: ${if (c.autoApplyMinPayment) "да" else "нет"}"
+            "$grace · авто-мин: ${if (c.autoApplyMinPayment) "да" else "нет"}$schedule"
         val balParts = mutableListOf<String>()
         if (c.principal > 0.01) balParts.add("Тело: ${moneyFormat.format(c.principal)} ₽")
         if (c.accruedInterest > 0.01) balParts.add("%: ${moneyFormat.format(c.accruedInterest)} ₽")
@@ -86,7 +92,9 @@ class CreditCalculatorActivity : AppCompatActivity() {
         maximumFractionDigits = 2
         minimumFractionDigits = 0
     }
-    private val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale("ru", "RU"))
+    private val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale("ru", "RU")).apply {
+        timeZone = TimeZone.getTimeZone("Europe/Moscow")
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -125,10 +133,13 @@ class CreditCalculatorActivity : AppCompatActivity() {
         val editPayDay = view.findViewById<EditText>(R.id.editPaymentDay)
         val editNextDue = view.findViewById<EditText>(R.id.editNextDue)
         val switchAuto = view.findViewById<MaterialSwitch>(R.id.switchAutoMin)
+        val editEndDate = view.findViewById<EditText>(R.id.editEndDate)
+        val switchRecalc = view.findViewById<MaterialSwitch>(R.id.switchRecalc)
         val textCalc = view.findViewById<TextView>(R.id.textCalcPreview)
         val btnWb = view.findViewById<MaterialButton>(R.id.btnWbPreset)
 
         var nextDueMillis = existing?.nextMinPaymentDue ?: 0L
+        var endDateMillis = existing?.endDate ?: 0L
 
         fun fillFrom(c: Credit) {
             editName.setText(c.name)
@@ -145,6 +156,9 @@ class CreditCalculatorActivity : AppCompatActivity() {
             switchAuto.isChecked = c.autoApplyMinPayment
             nextDueMillis = c.nextMinPaymentDue
             editNextDue.setText(if (nextDueMillis > 0) dateFormat.format(Date(nextDueMillis)) else "")
+            endDateMillis = c.endDate
+            editEndDate.setText(if (endDateMillis > 0) dateFormat.format(Date(endDateMillis)) else "")
+            switchRecalc.isChecked = c.recalcPaymentAfterPrepay
         }
 
         if (existing != null) fillFrom(existing) else {
@@ -156,6 +170,7 @@ class CreditCalculatorActivity : AppCompatActivity() {
             editInterest.setText("0")
             editFees.setText("0")
             switchAuto.isChecked = true
+            switchRecalc.isChecked = true
         }
 
         btnWb.setOnClickListener {
@@ -166,7 +181,9 @@ class CreditCalculatorActivity : AppCompatActivity() {
                 termMonths = editTerm.text.toString().toIntOrNull() ?: 12,
                 monthlyPayment = 0.0,
                 principal = editPrincipal.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0,
-                lastInterestDate = existing?.lastInterestDate ?: 0L
+                lastInterestDate = existing?.lastInterestDate ?: 0L,
+                endDate = endDateMillis,
+                recalcPaymentAfterPrepay = switchRecalc.isChecked
             )
             WbCreditMath.applyWbPreset(tmp)
             fillFrom(tmp)
@@ -195,13 +212,50 @@ class CreditCalculatorActivity : AppCompatActivity() {
             val p = editPrincipal.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
             val ai = editInterest.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
             val af = editFees.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
-            val tmp = Credit("x", "x", 0.0, 1, pay, p, 0L, ai, af, switchGrace.isChecked)
+            val r = editRate.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
+            val pd = editPayDay.text.toString().toIntOrNull() ?: WbCreditMath.DEFAULT_PAYMENT_DAY
+            val tmp = Credit("x", "x", r, 1, pay, p, 0L, ai, af, switchGrace.isChecked,
+                paymentDay = pd, nextMinPaymentDue = nextDueMillis,
+                endDate = endDateMillis, recalcPaymentAfterPrepay = switchRecalc.isChecked)
+            val now = System.currentTimeMillis()
+            val annuityLine = if (Annuity.hasSchedule(tmp)) {
+                val nd = Annuity.effectiveNextDue(tmp, now)
+                val n = Annuity.remainingPayments(nd, tmp.endDate)
+                val ap = Annuity.payment(p, r, n)
+                "\nАннуитет: ${moneyFormat.format(ap)} ₽ × $n (с ${dateFormat.format(Date(nd))} по ${dateFormat.format(Date(tmp.endDate))})" +
+                    if (tmp.recalcPaymentAfterPrepay) " — будет записан при сохранении" else ""
+            } else ""
             val min = WbCreditMath.calculateMinPayment(tmp)
             textCalc.text = WbCreditMath.formatBreakdownRu(min) { moneyFormat.format(it) } +
-                "\nСумма платежа → комис. → % → тело"
+                "\nСумма платежа → комис. → % → тело" + annuityLine
         }
-        listOf(editPayment, editPrincipal, editInterest, editFees).forEach {
+        listOf(editPayment, editPrincipal, editInterest, editFees, editRate, editPayDay).forEach {
             it.setOnFocusChangeListener { _, _ -> preview() }
+        }
+        switchRecalc.setOnCheckedChangeListener { _, _ -> preview() }
+
+        editEndDate.setOnClickListener {
+            val cal = Calendar.getInstance(TimeZone.getTimeZone("Europe/Moscow"))
+            if (endDateMillis > 0) cal.timeInMillis = endDateMillis
+            DatePickerDialog(
+                this,
+                { _, y, m, d ->
+                    cal.set(y, m, d, 0, 0, 0)
+                    cal.set(Calendar.MILLISECOND, 0)
+                    endDateMillis = cal.timeInMillis
+                    editEndDate.setText(dateFormat.format(Date(endDateMillis)))
+                    preview()
+                },
+                cal.get(Calendar.YEAR),
+                cal.get(Calendar.MONTH),
+                cal.get(Calendar.DAY_OF_MONTH)
+            ).apply {
+                setButton(DatePickerDialog.BUTTON_NEUTRAL, "Очистить") { _, _ ->
+                    endDateMillis = 0L
+                    editEndDate.setText("")
+                    preview()
+                }
+            }.show()
         }
 
         AlertDialog.Builder(this)
@@ -218,7 +272,9 @@ class CreditCalculatorActivity : AppCompatActivity() {
                 val share = editShare.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
                 val floor = editFloor.text.toString().replace(',', '.').toDoubleOrNull()
                     ?: WbCreditMath.DEFAULT_MIN_PRINCIPAL_FLOOR
-                val payDay = editPayDay.text.toString().toIntOrNull() ?: WbCreditMath.DEFAULT_PAYMENT_DAY
+                val payDay = (editPayDay.text.toString().toIntOrNull() ?: WbCreditMath.DEFAULT_PAYMENT_DAY)
+                    .coerceIn(1, 31)
+                val recalc = switchRecalc.isChecked
                 if (rate == null || rate < 0) {
                     Toast.makeText(this, "Укажите ставку", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
@@ -241,13 +297,18 @@ class CreditCalculatorActivity : AppCompatActivity() {
                         paymentDay = payDay,
                         nextMinPaymentDue = nextDueMillis,
                         autoApplyMinPayment = switchAuto.isChecked,
-                        contractStartDate = today
+                        contractStartDate = today,
+                        endDate = endDateMillis,
+                        recalcPaymentAfterPrepay = recalc
                     )
                     if (c.nextMinPaymentDue <= 0L) {
-                        c.nextMinPaymentDue = WbCreditMath.dueDateAfterBillingMonth(
+                        c.nextMinPaymentDue = if (Annuity.hasSchedule(c))
+                            Annuity.nextScheduledOnOrAfter(System.currentTimeMillis(), c.paymentDay)
+                        else WbCreditMath.dueDateAfterBillingMonth(
                             WbCreditMath.yearMonthOf(today), c.paymentDay
                         )
                     }
+                    Annuity.recompute(c)
                     credits.add(0, c)
                     addTransaction(-principal, "Получен кредит: $name (тело долга)", c.id)
                     if (interest > 0) addTransaction(-interest, "Начисл. %% (старт): $name", c.id)
@@ -257,6 +318,10 @@ class CreditCalculatorActivity : AppCompatActivity() {
                     val oldPrincipal = existing.principal
                     val oldInterest = existing.accruedInterest
                     val oldFees = existing.accruedFees
+                    val scheduleChanged = kotlin.math.abs(existing.rate - rate) > 1e-9 ||
+                        existing.paymentDay != payDay || existing.endDate != endDateMillis ||
+                        existing.recalcPaymentAfterPrepay != recalc ||
+                        existing.nextMinPaymentDue != nextDueMillis
                     existing.name = name
                     existing.rate = rate
                     existing.termMonths = term
@@ -270,6 +335,12 @@ class CreditCalculatorActivity : AppCompatActivity() {
                     existing.paymentDay = payDay
                     existing.nextMinPaymentDue = nextDueMillis
                     existing.autoApplyMinPayment = switchAuto.isChecked
+                    existing.endDate = endDateMillis
+                    existing.recalcPaymentAfterPrepay = recalc
+                    // Аннуитет: после правки тела / графика платёж пересчитывается
+                    if (kotlin.math.abs(principal - oldPrincipal) > 0.001 || scheduleChanged) {
+                        Annuity.recompute(existing)
+                    }
                     // Синхронизация журнала с правками тела / % / комиссий
                     val dPrincipal = principal - oldPrincipal
                     if (kotlin.math.abs(dPrincipal) > 0.01) {
@@ -323,19 +394,48 @@ class CreditCalculatorActivity : AppCompatActivity() {
             setPadding(48, 8, 48, 8)
             textSize = 13f
         }
+        // Аннуитет: выбор «Плановый» / «Досрочный в тело», по умолчанию — по дате
+        val hasSchedule = Annuity.hasSchedule(credit)
+        val defaultEarly = hasSchedule && !Annuity.isScheduledPaymentDay(credit, System.currentTimeMillis())
+        val radioPlanned = android.widget.RadioButton(this).apply {
+            id = View.generateViewId(); text = "Плановый (комис. → % → тело)"
+        }
+        val radioEarly = android.widget.RadioButton(this).apply {
+            id = View.generateViewId(); text = "Досрочный в тело"
+        }
+        val radioGroup = android.widget.RadioGroup(this).apply {
+            orientation = android.widget.RadioGroup.VERTICAL
+            setPadding(40, 0, 40, 0)
+            addView(radioPlanned)
+            addView(radioEarly)
+            check(if (defaultEarly) radioEarly.id else radioPlanned.id)
+            visibility = if (hasSchedule) View.VISIBLE else View.GONE
+        }
+        fun isEarly(): Boolean = hasSchedule && radioGroup.checkedRadioButtonId == radioEarly.id
         fun updatePreview() {
             val amount = input.text.toString().replace(',', '.').toDoubleOrNull() ?: 0.0
-            val b = WbCreditMath.allocatePayment(
+            val early = isEarly()
+            val b = if (early) Annuity.allocateEarly(
+                amount, credit.accruedFees, credit.accruedInterest, credit.principal
+            ) else WbCreditMath.allocatePayment(
                 amount, credit.accruedFees, credit.accruedInterest, credit.principal
             )
-            preview.text = WbCreditMath.formatAllocationRu(b) { moneyFormat.format(it) }
+            var text = WbCreditMath.formatAllocationRu(b) { moneyFormat.format(it) }
+            if (Annuity.recalcEnabled(credit) && b.principal > 0.0) {
+                val tmp = credit.copy(principal = (credit.principal - b.principal).coerceAtLeast(0.0))
+                val np = if (tmp.principal > 0.01) Annuity.computePayment(tmp, System.currentTimeMillis()) else 0.0
+                text += "\nНовый ежемесячный платёж: ${moneyFormat.format(np)} ₽"
+            }
+            preview.text = text
         }
         input.addTextChangedListener(SimpleTextWatcher { updatePreview() })
+        radioGroup.setOnCheckedChangeListener { _, _ -> updatePreview() }
         updatePreview()
 
         val box = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
             addView(input)
+            addView(radioGroup)
             addView(preview)
         }
         val min = WbCreditMath.calculateMinPayment(credit)
@@ -357,13 +457,11 @@ class CreditCalculatorActivity : AppCompatActivity() {
                     Toast.makeText(this, "Введите сумму", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-                val allocated = WbCreditMath.allocatePayment(
-                    amount, credit.accruedFees, credit.accruedInterest, credit.principal
-                )
-                WbCreditMath.applyBreakdown(credit, allocated)
-                val note = "Платёж: ${credit.name} · " +
-                    WbCreditMath.formatAllocationRu(allocated) { moneyFormat.format(it) }
-                addTransaction(allocated.total, note, credit.id)
+                val res = Annuity.applyPayment(
+                    credit, amount, if (hasSchedule) isEarly() else null, System.currentTimeMillis()
+                ) { moneyFormat.format(it) }
+                val allocated = res.breakdown
+                addTransaction(allocated.total, res.note, credit.id)
                 saveCredits()
                 val idx = credits.indexOfFirst { it.id == credit.id }
                 if (idx >= 0) adapter.notifyItemChanged(idx)
