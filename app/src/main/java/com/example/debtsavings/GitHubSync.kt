@@ -432,7 +432,7 @@ internal object GitHubSyncEngine {
         api.prepare()
 
         val localPlain = buildLocalSnapshot(context)
-        val localDigest = GitHubSyncCrypto.sha256(localPlain)
+        val localDigest = snapshotDigest(localPlain)
         val remote = api.readFile(CLOUD_FILE)
 
         when (mode) {
@@ -566,7 +566,7 @@ internal object GitHubSyncEngine {
         return DataBackup.buildJson(prefs, snapshot).toByteArray(Charsets.UTF_8)
     }
 
-    private fun isEmptySnapshot(plain: ByteArray): Boolean {
+    private fun snapshotDigest(plain: ByteArray): String {\n        val root = JSONObject(String(plain, Charsets.UTF_8))\n        root.remove("exportedAt")\n        root.remove("exportedAtMillis")\n        return GitHubSyncCrypto.sha256(root.toString().toByteArray(Charsets.UTF_8))\n    }\n\n    private fun isEmptySnapshot(plain: ByteArray): Boolean {
         val root = JSONObject(String(plain, Charsets.UTF_8))
         val prefs = root.optJSONObject("prefs") ?: JSONObject()
         return (root.optJSONArray("credits")?.length() ?: 0) == 0 &&
