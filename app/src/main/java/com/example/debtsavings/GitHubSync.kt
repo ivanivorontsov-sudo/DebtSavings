@@ -327,7 +327,11 @@ private class GitHubSyncApi(
             }
         }
         requireSuccess(repoResponse, "Открытие репозитория")
-        branch = JSONObject(repoResponse.body).optString("default_branch", "main").ifBlank { "main" }
+        val repositoryInfo = JSONObject(repoResponse.body)
+        if (!repositoryInfo.optBoolean("private", false)) {
+            throw IOException("Репозиторий синхронизации должен быть приватным. Создайте приватный репозиторий и повторите подключение.")
+        }
+        branch = repositoryInfo.optString("default_branch", "main").ifBlank { "main" }
     }
 
     fun readFile(path: String): GitHubRemoteFile? {
