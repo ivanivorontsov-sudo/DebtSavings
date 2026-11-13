@@ -1,0 +1,28 @@
+name: Clean superseded releases
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/cleanup-releases.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Keep only the newest DebtSavings build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          keep_tag="build-1.2.0-6"
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            [ "$tag" = "$keep_tag" ] && continue
+            gh release delete "$tag" --yes --cleanup-tag
+          done < <(gh release list --limit 100 --json tagName --jq '.[].tagName')
