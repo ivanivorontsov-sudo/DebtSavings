@@ -48,4 +48,4 @@
         android:title="Импорт…"
         android:icon="@android:drawable/ic_menu_revert"
         app:showAsAction="never" />
-</menu>
+    <item\n        android:id="@+id/menu_github_sync"\n        android:title="@string/github_sync_title"\n        android:icon="@android:drawable/ic_menu_upload"\n        app:showAsAction="never" />\n</menu>
