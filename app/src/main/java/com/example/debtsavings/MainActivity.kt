@@ -315,6 +315,135 @@ class MainActivity : AppCompatActivity() {
         return super.onOptionsItemSelected(item)
     }
 
+    private fun showGitHubSyncDialog() {
+        if (!GitHubSyncSettings.isConfigured(this)) {
+            showGitHubConnectDialog()
+            return
+        }
+
+        val options = arrayOf(
+            "Синхронизировать сейчас",
+            "Загрузить данные телефона в GitHub",
+            "Восстановить данные из GitHub",
+            "Изменить токен / пароль",
+            "Отключить GitHub"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("GitHub · ${GitHubSyncSettings.repoName(this)}")
+            .setMessage(
+                GitHubSyncSettings.status(this) + "\\n\\n" +
+                    "Автосинхронизация включается после изменений и дополнительно запускается раз в час.\\n" +
+                    "Облачная копия зашифрована AES-256-GCM. Пароль синхронизации нужен на каждом устройстве."
+            )
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> {
+                        GitHubSyncSettings.setStatus(this, "Синхронизация поставлена в очередь…")
+                        GitHubSyncScheduler.enqueueNow(this, "auto")
+                        Toast.makeText(this, "Синхронизация запущена", Toast.LENGTH_SHORT).show()
+                    }
+                    1 -> AlertDialog.Builder(this)
+                        .setTitle("Загрузить данные в GitHub?")
+                        .setMessage("Текущая зашифрованная копия в GitHub будет сохранена в папке conflicts перед заменой. Продолжить?")
+                        .setPositiveButton("Загрузить") { _, _ ->
+                            GitHubSyncSettings.setStatus(this, "Загрузка данных в GitHub…")
+                            GitHubSyncScheduler.enqueueNow(this, "upload")
+                        }
+                        .setNegativeButton("Отмена", null)
+                        .show()
+                    2 -> AlertDialog.Builder(this)
+                        .setTitle("Восстановить из GitHub?")
+                        .setMessage("Текущие данные на этом телефоне будут сохранены в локальную зашифрованную копию перед восстановлением. Продолжить?")
+                        .setPositiveButton("Восстановить") { _, _ ->
+                            GitHubSyncSettings.setStatus(this, "Восстановление из GitHub…")
+                            GitHubSyncScheduler.enqueueNow(this, "download")
+                        }
+                        .setNegativeButton("Отмена", null)
+                        .show()
+                    3 -> showGitHubConnectDialog()
+                    4 -> AlertDialog.Builder(this)
+                        .setTitle("Отключить GitHub?")
+                        .setMessage("Локальные данные не удалятся. Облачная копия в GitHub также останется.")
+                        .setPositiveButton("Отключить") { _, _ ->
+                            GitHubSyncSettings.disconnect(this)
+                            Toast.makeText(this, "GitHub отключён. Данные на телефоне сохранены.", Toast.LENGTH_LONG).show()
+                        }
+                        .setNegativeButton("Отмена", null)
+                        .show()
+                }
+            }
+            .setNegativeButton("Закрыть", null)
+            .show()
+    }
+
+    private fun showGitHubConnectDialog() {
+        val density = resources.displayMetrics.density
+        val padding = (20 * density).toInt()
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(padding, padding / 2, padding, 0)
+        }
+
+        val info = TextView(this).apply {
+            text = "Создайте GitHub Personal Access Token. Для Fine-grained token нужны Contents: Read and write; для автоматического создания приватного репозитория дополнительно Administration: Read and write и доступ ко всем репозиториям. Можно заранее создать приватный репозиторий и выдать токену доступ только к нему.\n\nПароль синхронизации придумайте сами (не менее 8 символов) и введите такой же на каждом телефоне. Он не отправляется в GitHub."
+            textSize = 14f
+        }
+        val tokenInput = EditText(this).apply {
+            hint = "GitHub token"
+            singleLine = true
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        val repoInput = EditText(this).apply {
+            hint = "Имя приватного репозитория"
+            setText(GitHubSyncSettings.repoName(this@MainActivity))
+            singleLine = true
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+        }
+        val passwordInput = EditText(this).apply {
+            hint = "Пароль синхронизации (от 8 символов)"
+            singleLine = true
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        form.addView(info)
+        form.addView(tokenInput)
+        form.addView(repoInput)
+        form.addView(passwordInput)
+
+        AlertDialog.Builder(this)
+            .setTitle("Подключить GitHub")
+            .setView(form)
+            .setPositiveButton("Подключить", null)
+            .setNeutralButton("Создать токен") { _, _ ->
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/settings/personal-access-tokens/new")))
+                } catch (_: Exception) {
+                    Toast.makeText(this, "Не удалось открыть GitHub", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Отмена", null)
+            .create()
+            .also { dialog ->
+                dialog.setOnShowListener {
+                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                        val token = tokenInput.text?.toString().orEmpty().trim()
+                        val repo = repoInput.text?.toString().orEmpty().trim()
+                        val password = passwordInput.text?.toString().orEmpty()
+                        try {
+                            GitHubSyncSettings.save(this, token, repo, password)
+                            GitHubSyncScheduler.ensurePeriodic(this)
+                            GitHubSyncSettings.setStatus(this, "Проверяем токен и подключаем приватный репозиторий…")
+                            GitHubSyncScheduler.enqueueNow(this, "auto")
+                            Toast.makeText(this, "Настройки сохранены. Запущена первая синхронизация.", Toast.LENGTH_LONG).show()
+                            dialog.dismiss()
+                        } catch (error: Exception) {
+                            passwordInput.error = error.message ?: "Проверьте введённые данные"
+                        }
+                    }
+                }
+                dialog.show()
+            }
+    }
+
     private fun toggleGameMode() {
         val enabled = !prefs.getBoolean(GameScenario.PREF_ENABLED, false)
         prefs.edit().putBoolean(GameScenario.PREF_ENABLED, enabled).apply()
