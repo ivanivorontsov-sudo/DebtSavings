@@ -115,10 +115,12 @@ class DebtPlanActivity : AppCompatActivity() {
         append("\nОжидаемые будущие проценты: ${money.format(r.totalInterestForecast)} ₽")
         append("\nПрогноз суммы выплат: ${money.format(r.totalPaidForecast)} ₽")
         if (r.priorityOrder.isNotEmpty()) {
-            append("\nПриоритет: ${r.priorityOrder.joinToString(" → ")}")
+            val priority = r.priorityOrder.joinToString(" → ")
+            append("\nПриоритет: $priority")
         }
         if (r.paidOffOrder.isNotEmpty()) {
-            append("\nОриентировочно закроются: ${r.paidOffOrder.joinToString(" → ")}")
+            val paidOff = r.paidOffOrder.joinToString(" → ")
+            append("\nОриентировочно закроются: $paidOff")
         }
     }
 
