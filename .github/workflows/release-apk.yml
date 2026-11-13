@@ -1,32 +1,66 @@
 name: Release APK
+
 on:
   workflow_dispatch:
   push:
+    branches: ['release/**']
     tags: ['v*', 'build-*']
+
 permissions:
   contents: write
+
 jobs:
   apk:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: .
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: '17' }
-      - uses: gradle/actions/setup-gradle@v4
-        with: { gradle-version: '8.10.2' }
-      - name: Build debug APK
-        run: |
-          if [ -f gradlew ]; then chmod +x gradlew; ./gradlew --no-daemon assembleDebug; else gradle --no-daemon assembleDebug; fi
-      - name: Publish release
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.2'
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - name: Create Gradle Wrapper
+        run: gradle wrapper --gradle-version 8.2
+      - name: Build Release APK
+        run: ./gradlew --no-daemon testDebugUnitTest assembleRelease --stacktrace
+      - name: Verify Release APK
+        run: test -s app/build/outputs/apk/release/app-release.apk
+      - name: Upload Release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: debt-savings-release
+          path: app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+      - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
-          APK=$(find . -path '*outputs/apk/debug/*.apk' | head -1)
-          test -n "$APK"
-          cp "$APK" "$GITHUB_WORKSPACE/DebtSavings.apk"
-          TAG=${GITHUB_REF_NAME}
-          if [ "$GITHUB_REF_TYPE" != tag ]; then TAG="build-$(date -u +%Y%m%d)-${GITHUB_RUN_NUMBER}"; fi
-          gh release create "$TAG" "$GITHUB_WORKSPACE/DebtSavings.apk" --target "$GITHUB_SHA" --title "DebtSavings $TAG" --notes "Автосборка (debug-подпись) из $GITHUB_SHA" || gh release upload "$TAG" "$GITHUB_WORKSPACE/DebtSavings.apk" --clobber
+          set -euo pipefail
+          APK="$GITHUB_WORKSPACE/app/build/outputs/apk/release/app-release.apk"
+          OUT="$GITHUB_WORKSPACE/DebtSavings-1.2.0-release.apk"
+          cp "$APK" "$OUT"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            TAG="$GITHUB_REF_NAME"
+            PRERELEASE=false
+          else
+            TAG="build-1.2.0-${GITHUB_RUN_NUMBER}"
+            PRERELEASE=true
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$OUT" --clobber
+          else
+            EXTRA=()
+            if [ "$PRERELEASE" = true ]; then EXTRA+=(--prerelease); fi
+            gh release create "$TAG" "$OUT" --target "$GITHUB_SHA" --title "DebtSavings 1.2.0 ($TAG)" --notes "Сборка Android buildType=release (assembleRelease). Подпись CI: стандартный Android debug-keystore для установки и тестирования; для публикации в Google Play нужен собственный release-keystore." "${EXTRA[@]}"
+          fi
+          echo "Опубликован релиз: https://github.com/ivanivorontsov-sudo/DebtSavings/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"

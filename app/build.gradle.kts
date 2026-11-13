@@ -17,6 +17,9 @@ android {
 
     buildTypes {
         release {
+            // Release build variant, signed with the standard CI debug key so the APK is installable.
+            // Replace with a private release keystore before publishing to Google Play.
+            signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
