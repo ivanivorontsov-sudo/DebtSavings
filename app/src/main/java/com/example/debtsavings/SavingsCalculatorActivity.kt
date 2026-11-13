@@ -142,13 +142,13 @@ class SavingsCalculatorActivity : AppCompatActivity() {
         val projection = SavingsGoalMath.project(savings, goal, contribution, rate)
 
         info.text = buildString {
-            append("Текущие свободные накопления: \${money.format(savings)} ₽\n")
-            append("Ставка: \${money.format(rate)}% годовых\n")
-            append("Оценка процентов сейчас: ≈ \${money.format(savings * rate / 36500.0)} ₽ в день\n")
-            append("При взносе \${money.format(contribution)} ₽/мес. через год может быть ≈ \${money.format(projection.balanceAfter12Months)} ₽.\n\n")
+            append("Текущие свободные накопления: ${money.format(savings)} ₽\n")
+            append("Ставка: ${money.format(rate)}% годовых\n")
+            append("Оценка процентов сейчас: ≈ ${money.format(savings * rate / 36500.0)} ₽ в день\n")
+            append("При взносе ${money.format(contribution)} ₽/мес. через год может быть ≈ ${money.format(projection.balanceAfter12Months)} ₽.\n\n")
 
             if (goal > 0.0) {
-                append("Личная цель: \${money.format(goal)} ₽\n")
+                append("Личная цель: ${money.format(goal)} ₽\n")
                 append(goalProgress(savings, goal))
                 append("\n")
                 append(monthsText(projection.monthsToTarget))
@@ -160,7 +160,7 @@ class SavingsCalculatorActivity : AppCompatActivity() {
             if (expenses > 0.0) {
                 val reserveTarget = expenses * reserveMonths
                 val reserveProjection = SavingsGoalMath.project(savings, reserveTarget, contribution, rate)
-                append("Резерв на \${reserveMonths} мес. расходов: \${money.format(reserveTarget)} ₽\n")
+                append("Резерв на ${reserveMonths} мес. расходов: ${money.format(reserveTarget)} ₽\n")
                 append(goalProgress(savings, reserveTarget))
                 append("\n")
                 append(monthsText(reserveProjection.monthsToTarget))
@@ -176,7 +176,7 @@ class SavingsCalculatorActivity : AppCompatActivity() {
     private fun goalProgress(current: Double, target: Double): String {
         val percent = (current / target * 100.0).coerceIn(0.0, 100.0)
         val remaining = (target - current).coerceAtLeast(0.0)
-        return "Готово: \${money.format(percent)}% · осталось \${money.format(remaining)} ₽"
+        return "Готово: ${money.format(percent)}% · осталось ${money.format(remaining)} ₽"
     }
 
     private fun monthsText(months: Int?): String = when (months) {

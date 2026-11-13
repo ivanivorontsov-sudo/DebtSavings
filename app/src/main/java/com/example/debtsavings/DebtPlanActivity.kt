@@ -90,9 +90,9 @@ class DebtPlanActivity : AppCompatActivity() {
         val avalanche = DebtPayoffPlanner.calculate(credits, extra, DebtStrategy.AVALANCHE)
         val snowball = DebtPayoffPlanner.calculate(credits, extra, DebtStrategy.SNOWBALL)
         results.text = buildString {
-            append("Минимальные платежи по всем кредитам: \${money.format(avalanche.monthlyMinimums)} ₽/мес.\n")
-            append("Дополнительно: \${money.format(extra)} ₽/мес.\n")
-            append("Исходный остаток: \${money.format(avalanche.startingDebt)} ₽\n\n")
+            append("Минимальные платежи по всем кредитам: ${money.format(avalanche.monthlyMinimums)} ₽/мес.\n")
+            append("Дополнительно: ${money.format(extra)} ₽/мес.\n")
+            append("Исходный остаток: ${money.format(avalanche.startingDebt)} ₽\n\n")
             append(formatResult("ЛАВИНА — сначала высокая ставка", avalanche))
             append("\n\n")
             append(formatResult("СНЕЖНЫЙ КОМ — сначала маленький долг", snowball))
@@ -107,18 +107,18 @@ class DebtPlanActivity : AppCompatActivity() {
         append(title)
         append("\n")
         when (r.status) {
-            DebtPlanStatus.PAID_OFF -> append("Ориентир до закрытия: \${r.months} мес. (\${r.months / 12} г. \${r.months % 12} мес.)")
+            DebtPlanStatus.PAID_OFF -> append("Ориентир до закрытия: ${r.months} мес. (${r.months / 12} г. ${r.months % 12} мес.)")
             DebtPlanStatus.NO_DEBTS -> append("Нет открытых долгов.")
             DebtPlanStatus.NO_PROGRESS -> append("План не закрывает долг: текущих платежей может не хватать даже на проценты.")
             DebtPlanStatus.LIMIT_REACHED -> append("За 600 месяцев прогноз не закрывает все долги.")
         }
-        append("\nОжидаемые будущие проценты: \${money.format(r.totalInterestForecast)} ₽")
-        append("\nПрогноз суммы выплат: \${money.format(r.totalPaidForecast)} ₽")
+        append("\nОжидаемые будущие проценты: ${money.format(r.totalInterestForecast)} ₽")
+        append("\nПрогноз суммы выплат: ${money.format(r.totalPaidForecast)} ₽")
         if (r.priorityOrder.isNotEmpty()) {
-            append("\nПриоритет: \${r.priorityOrder.joinToString(" → ")}")
+            append("\nПриоритет: ${r.priorityOrder.joinToString(" → ")}")
         }
         if (r.paidOffOrder.isNotEmpty()) {
-            append("\nОриентировочно закроются: \${r.paidOffOrder.joinToString(" → ")}")
+            append("\nОриентировочно закроются: ${r.paidOffOrder.joinToString(" → ")}")
         }
     }
 
