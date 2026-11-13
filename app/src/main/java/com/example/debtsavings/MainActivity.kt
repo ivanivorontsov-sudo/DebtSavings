@@ -312,6 +312,9 @@ class MainActivity : AppCompatActivity() {
             R.id.menu_import -> {
                 importLauncher.launch(arrayOf("application/json", "text/*", "*/*")); return true
             }
+            R.id.menu_github_sync -> {
+                showGitHubSyncDialog(); return true
+            }
         }
         return super.onOptionsItemSelected(item)
     }
