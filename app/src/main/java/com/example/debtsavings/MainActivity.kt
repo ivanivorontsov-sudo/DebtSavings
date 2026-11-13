@@ -394,18 +394,18 @@ class MainActivity : AppCompatActivity() {
         }
         val tokenInput = EditText(this).apply {
             hint = "GitHub token"
-            singleLine = true
+            setSingleLine(true)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
         val repoInput = EditText(this).apply {
             hint = "Имя приватного репозитория"
             setText(GitHubSyncSettings.repoName(this@MainActivity))
-            singleLine = true
+            setSingleLine(true)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
         }
         val passwordInput = EditText(this).apply {
             hint = "Пароль синхронизации (от 8 символов)"
-            singleLine = true
+            setSingleLine(true)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
         form.addView(info)
