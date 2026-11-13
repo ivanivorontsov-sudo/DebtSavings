@@ -527,7 +527,7 @@ internal object GitHubSyncEngine {
         PaymentReminderScheduler.scheduleNext(context)
 
         val restoredJson = buildLocalSnapshot(context)
-        val restoredDigest = GitHubSyncCrypto.sha256(restoredJson)
+        val restoredDigest = snapshotDigest(restoredJson)
         val status = "Восстановлено из GitHub. Локальная копия до восстановления сохранена в памяти приложения."
         GitHubSyncSettings.saveBaseline(context, cloud.sha, restoredDigest, status)
         return status
