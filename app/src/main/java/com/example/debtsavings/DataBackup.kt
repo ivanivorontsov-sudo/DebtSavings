@@ -13,10 +13,10 @@ import java.util.TimeZone
 
 /**
  * Экспорт / импорт всех данных приложения в один JSON-файл.
- * exportVersion=1: credits, transactions, subscriptions + ключевые prefs.
+ * exportVersion=2: credits, transactions, subscriptions + настройки накоплений и плана погашения.
  */
 object DataBackup {
-    const val EXPORT_VERSION = 1
+    const val EXPORT_VERSION = 2
     private val UTF8: Charset = Charsets.UTF_8
 
     data class Snapshot(
@@ -25,7 +25,12 @@ object DataBackup {
         val subscriptions: List<Subscription>,
         val savingsRate: Float,
         val savingsLastInterestDate: Long,
-        val defaultsSeeded: Boolean
+        val defaultsSeeded: Boolean,
+        val savingsGoalTarget: Float = 0f,
+        val savingsMonthlyContribution: Float = 0f,
+        val monthlyEssentialExpenses: Float = 0f,
+        val emergencyMonths: Int = 3,
+        val debtPlanExtra: Float = 0f
     )
 
     fun buildJson(prefs: SharedPreferences, snapshot: Snapshot): String {
@@ -61,6 +66,11 @@ object DataBackup {
         root.put("prefs", JSONObject().apply {
             put("savings_rate", snapshot.savingsRate.toDouble())
             put("savings_last_interest_date", snapshot.savingsLastInterestDate)
+            put("savings_goal_target", snapshot.savingsGoalTarget.toDouble())
+            put("savings_monthly_contribution", snapshot.savingsMonthlyContribution.toDouble())
+            put("monthly_essential_expenses", snapshot.monthlyEssentialExpenses.toDouble())
+            put("emergency_months", snapshot.emergencyMonths)
+            put("debt_plan_extra", snapshot.debtPlanExtra.toDouble())
             put(Persistence.DEFAULTS_SEEDED_KEY, snapshot.defaultsSeeded)
         })
         return root.toString(2)
@@ -111,6 +121,11 @@ object DataBackup {
         val prefsObj = root.optJSONObject("prefs") ?: JSONObject()
         val savingsRate = prefsObj.optDouble("savings_rate", 0.0).toFloat()
         val savingsLast = prefsObj.optLong("savings_last_interest_date", 0L)
+        val goalTarget = prefsObj.optDouble("savings_goal_target", 0.0).toFloat()
+        val monthlyContribution = prefsObj.optDouble("savings_monthly_contribution", 0.0).toFloat()
+        val essentialExpenses = prefsObj.optDouble("monthly_essential_expenses", 0.0).toFloat()
+        val emergencyMonths = prefsObj.optInt("emergency_months", 3).coerceIn(1, 24)
+        val debtPlanExtra = prefsObj.optDouble("debt_plan_extra", 0.0).toFloat()
         val seeded = prefsObj.optBoolean(Persistence.DEFAULTS_SEEDED_KEY, true)
 
         return Snapshot(
@@ -119,7 +134,12 @@ object DataBackup {
             subscriptions = subscriptions,
             savingsRate = savingsRate,
             savingsLastInterestDate = savingsLast,
-            defaultsSeeded = seeded
+            defaultsSeeded = seeded,
+            savingsGoalTarget = goalTarget,
+            savingsMonthlyContribution = monthlyContribution,
+            monthlyEssentialExpenses = essentialExpenses,
+            emergencyMonths = emergencyMonths,
+            debtPlanExtra = debtPlanExtra
         )
     }
 
@@ -131,6 +151,11 @@ object DataBackup {
         prefs.edit()
             .putFloat("savings_rate", snapshot.savingsRate)
             .putLong("savings_last_interest_date", snapshot.savingsLastInterestDate)
+            .putFloat("savings_goal_target", snapshot.savingsGoalTarget)
+            .putFloat("savings_monthly_contribution", snapshot.savingsMonthlyContribution)
+            .putFloat("monthly_essential_expenses", snapshot.monthlyEssentialExpenses)
+            .putInt("emergency_months", snapshot.emergencyMonths)
+            .putFloat("debt_plan_extra", snapshot.debtPlanExtra)
             .putBoolean(Persistence.DEFAULTS_SEEDED_KEY, snapshot.defaultsSeeded)
             .apply()
     }

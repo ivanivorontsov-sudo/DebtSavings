@@ -104,7 +104,12 @@ class MainActivity : AppCompatActivity() {
                     subscriptions = subscriptionsForBackup.toList(),
                     savingsRate = prefs.getFloat("savings_rate", 0f),
                     savingsLastInterestDate = prefs.getLong("savings_last_interest_date", 0L),
-                    defaultsSeeded = prefs.getBoolean(Persistence.DEFAULTS_SEEDED_KEY, false)
+                    defaultsSeeded = prefs.getBoolean(Persistence.DEFAULTS_SEEDED_KEY, false),
+                    savingsGoalTarget = prefs.getFloat("savings_goal_target", 0f),
+                    savingsMonthlyContribution = prefs.getFloat("savings_monthly_contribution", 0f),
+                    monthlyEssentialExpenses = prefs.getFloat("monthly_essential_expenses", 0f),
+                    emergencyMonths = prefs.getInt("emergency_months", 3),
+                    debtPlanExtra = prefs.getFloat("debt_plan_extra", 0f)
                 )
                 DataBackup.writeToStream(prefs, snap, out)
             } ?: throw IllegalStateException("Не удалось открыть файл")
