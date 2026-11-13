@@ -371,12 +371,12 @@ private class GitHubSyncApi(
         connection.setRequestProperty("Accept", "application/vnd.github+json")
         connection.setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
         connection.setRequestProperty("User-Agent", "DebtSavings-Android")
-        if (body != null) {
-            connection.doOutput = true
-            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-        }
         return try {
+            if (body != null) {
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            }
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
@@ -566,7 +566,14 @@ internal object GitHubSyncEngine {
         return DataBackup.buildJson(prefs, snapshot).toByteArray(Charsets.UTF_8)
     }
 
-    private fun snapshotDigest(plain: ByteArray): String {\n        val root = JSONObject(String(plain, Charsets.UTF_8))\n        root.remove("exportedAt")\n        root.remove("exportedAtMillis")\n        return GitHubSyncCrypto.sha256(root.toString().toByteArray(Charsets.UTF_8))\n    }\n\n    private fun isEmptySnapshot(plain: ByteArray): Boolean {
+    private fun snapshotDigest(plain: ByteArray): String {
+        val root = JSONObject(String(plain, Charsets.UTF_8))
+        root.remove("exportedAt")
+        root.remove("exportedAtMillis")
+        return GitHubSyncCrypto.sha256(root.toString().toByteArray(Charsets.UTF_8))
+    }
+
+    private fun isEmptySnapshot(plain: ByteArray): Boolean {
         val root = JSONObject(String(plain, Charsets.UTF_8))
         val prefs = root.optJSONObject("prefs") ?: JSONObject()
         return (root.optJSONArray("credits")?.length() ?: 0) == 0 &&
