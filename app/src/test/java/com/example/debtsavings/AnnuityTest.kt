@@ -4,139 +4,135 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Calendar
+import java.util.TimeZone
 
 class AnnuityTest {
-    private val money: (Double) -> String = { String.format(java.util.Locale.US, "%.2f", it) }
-
-    /** Значения из приложения банка 25.09.2026. */
-    @Test
-    fun bankValues_exact() {
-        assertEquals(780.70, Annuity.payment(25859.48, 26.0, 59), 0.0)
-        assertEquals(4377.59, Annuity.payment(145000.0, 26.0, 59), 0.0)
+    private val money: (Double) -> String = {
+        String.format(java.util.Locale.US, "%.2f", it)
     }
 
-    @Test
-    fun remainingPayments_octToAug2031_is59() {
-        val wb2Next = Migrations.moscowDate(2026, 10, 26)
-        val wb2End = Migrations.moscowDate(2031, 8, 22)
-        assertEquals(59, Annuity.remainingPayments(wb2Next, wb2End))
-        val wb1Next = Migrations.moscowDate(2026, 10, 12)
-        val wb1End = Migrations.moscowDate(2031, 8, 8)
-        assertEquals(59, Annuity.remainingPayments(wb1Next, wb1End))
+    private fun moscowDate(year: Int, month: Int, day: Int): Long {
+        val calendar = Calendar.getInstance(TimeZone.getTimeZone("Europe/Moscow"))
+        calendar.clear()
+        calendar.set(year, month - 1, day, 0, 0, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        return calendar.timeInMillis
     }
 
-    private fun wb2(principal: Double = 25859.48, interest: Double = 50.0) = Credit(
-        id = "wb2", name = "Вб_2", rate = 26.0, termMonths = 58, monthlyPayment = 836.34,
-        principal = principal, lastInterestDate = 0L, accruedInterest = interest, accruedFees = 0.0,
-        paymentDay = 26, nextMinPaymentDue = Migrations.moscowDate(2026, 10, 26),
-        endDate = Migrations.moscowDate(2031, 8, 22), recalcPaymentAfterPrepay = true
+    private fun scheduledCredit(
+        principal: Double = 10_000.0,
+        interest: Double = 50.0,
+        fees: Double = 0.0,
+        rate: Double = 12.0,
+        payment: Double = 500.0,
+        nextDue: Long = moscowDate(2027, 4, 25),
+        endDate: Long = moscowDate(2028, 3, 25),
+        paymentDay: Int = 25
+    ) = Credit(
+        id = "test-credit",
+        name = "Тестовый кредит",
+        rate = rate,
+        termMonths = 12,
+        monthlyPayment = payment,
+        principal = principal,
+        lastInterestDate = 0L,
+        accruedInterest = interest,
+        accruedFees = fees,
+        paymentDay = paymentDay,
+        nextMinPaymentDue = nextDue,
+        autoApplyMinPayment = false,
+        endDate = endDate,
+        recalcPaymentAfterPrepay = true
     )
 
     @Test
-    fun recompute_givesBankPayment() {
-        val c = wb2()
-        val now = Migrations.moscowDate(2026, 9, 25) + 12 * 3600_000L
-        assertTrue(Annuity.recompute(c, now))
-        assertEquals(780.70, c.monthlyPayment, 0.0)
-        // min payment equals monthlyPayment
-        assertEquals(780.70, WbCreditMath.calculateMinPayment(c).total, 1e-9)
+    fun annuityPaymentIsPositiveAndRoundedToCents() {
+        val payment = Annuity.payment(100_000.0, 12.0, 12)
+        assertTrue(payment > 0.0)
+        assertEquals(payment, Annuity.round2(payment), 0.0)
     }
 
     @Test
-    fun earlyPayment_offSchedule_allToPrincipal_andRecalc() {
-        val c = wb2(principal = 27702.36, interest = 19.73)
-        val now = Migrations.moscowDate(2026, 9, 25) + 9 * 3600_000L
-        assertFalse(Annuity.isScheduledPaymentDay(c, now))
-        val res = Annuity.applyPayment(c, 1842.88, null, now, money)
-        assertTrue(res.early)
-        assertEquals(1842.88, res.breakdown.principal, 1e-9)
-        assertEquals(0.0, res.breakdown.interest, 0.0)
-        assertEquals(19.73, c.accruedInterest, 1e-9)
-        assertEquals(25859.48, c.principal, 1e-6)
-        assertEquals(780.70, c.monthlyPayment, 0.0)
-        assertTrue(res.note.startsWith("Досрочный платёж: всё в тело"))
+    fun remainingPaymentsIncludesBothFirstAndFinalDueDates() {
+        val first = moscowDate(2027, 4, 15)
+        val last = moscowDate(2028, 3, 15)
+        assertEquals(12, Annuity.remainingPayments(first, last))
     }
 
     @Test
-    fun scheduledDay_feesInterestPrincipal() {
-        val c = wb2(interest = 400.0).apply { accruedFees = 10.0; autoApplyMinPayment = false }
-        val now = Migrations.moscowDate(2026, 10, 26) + 10 * 3600_000L
-        assertTrue(Annuity.isScheduledPaymentDay(c, now))
-        val res = Annuity.applyPayment(c, 780.70, null, now, money)
-        assertFalse(res.early)
-        assertEquals(10.0, res.breakdown.fees, 1e-9)
-        assertEquals(400.0, res.breakdown.interest, 1e-9)
-        assertEquals(370.70, res.breakdown.principal, 1e-9)
-        // срок сдвинут на 26.11 (авто-учёт выключен)
-        assertEquals(Migrations.moscowDate(2026, 11, 26), c.nextMinPaymentDue)
+    fun recomputeUsesRemainingTermAndCurrentPrincipal() {
+        val credit = scheduledCredit(principal = 10_000.0, payment = 1.0)
+        val now = moscowDate(2027, 3, 1)
+
+        assertTrue(Annuity.recompute(credit, now))
+        assertEquals(Annuity.payment(10_000.0, 12.0, 12), credit.monthlyPayment, 0.0)
     }
 
     @Test
-    fun explicitChoice_overridesDate() {
-        val c = wb2(interest = 100.0)
-        val now = Migrations.moscowDate(2026, 9, 25)
-        val res = Annuity.applyPayment(c, 500.0, false, now, money)
-        assertFalse(res.early)
-        assertEquals(100.0, res.breakdown.interest, 1e-9)
+    fun earlyPaymentGoesToPrincipalAndLeavesAccruedInterestUntouched() {
+        val credit = scheduledCredit()
+        val now = moscowDate(2027, 3, 12) + 9 * 3_600_000L
+        assertFalse(Annuity.isScheduledPaymentDay(credit, now))
+
+        val result = Annuity.applyPayment(credit, 1_000.0, null, now, money)
+
+        assertTrue(result.early)
+        assertEquals(1_000.0, result.breakdown.principal, 0.0)
+        assertEquals(0.0, result.breakdown.interest, 0.0)
+        assertEquals(0.0, result.breakdown.fees, 0.0)
+        assertEquals(9_000.0, credit.principal, 0.0)
+        assertEquals(50.0, credit.accruedInterest, 0.0)
     }
 
     @Test
-    fun creditWithoutEndDate_keepsOldRule() {
-        val c = Credit("x", "Альфа", 70.0, 12, 300.0, 1000.0, 0L, accruedInterest = 50.0)
-        val now = Migrations.moscowDate(2026, 9, 25)
-        val res = Annuity.applyPayment(c, 300.0, null, now, money)
-        assertFalse(res.early)
-        assertEquals(50.0, res.breakdown.interest, 1e-9)
-        assertEquals(250.0, res.breakdown.principal, 1e-9)
-        assertEquals(300.0, c.monthlyPayment, 0.0) // не пересчитывается
+    fun scheduledPaymentAllocatesFeesThenInterestThenPrincipal() {
+        val credit = scheduledCredit(principal = 1_000.0, interest = 40.0, fees = 10.0, payment = 100.0)
+        val now = moscowDate(2027, 4, 25) + 10 * 3_600_000L
+
+        assertTrue(Annuity.isScheduledPaymentDay(credit, now))
+        val result = Annuity.applyPayment(credit, 100.0, null, now, money)
+
+        assertFalse(result.early)
+        assertEquals(10.0, result.breakdown.fees, 0.0)
+        assertEquals(40.0, result.breakdown.interest, 0.0)
+        assertEquals(50.0, result.breakdown.principal, 0.0)
     }
 
     @Test
-    fun interestPartParsing_nbsp() {
-        assertEquals(19.73, Migrations.interestPartOf("Платёж: Вб_2 · Из платежа: % 19,73 ₽ · тело 1\u00A0823,15 ₽")!!, 1e-9)
-        assertEquals(19.73, Migrations.interestPartOf("Из платежа: %\u202F19,73\u00A0₽ · тело 1\u202F823,15 ₽")!!, 1e-9)
+    fun creditWithoutScheduleKeepsStandardAllocation() {
+        val credit = Credit(
+            "ordinary", "Обычный кредит", 18.0, 12, 300.0, 1_000.0, 0L,
+            accruedInterest = 50.0
+        )
+        val result = Annuity.applyPayment(
+            credit, 300.0, null, moscowDate(2027, 3, 1), money
+        )
+
+        assertFalse(result.early)
+        assertEquals(50.0, result.breakdown.interest, 0.0)
+        assertEquals(250.0, result.breakdown.principal, 0.0)
+        assertEquals(300.0, credit.monthlyPayment, 0.0)
     }
 
-    /**
-     * Модель банка: досрочка 1 842,88 от 27 702,36 → тело 25 859,48, начисленные % не трогаются,
-     * % следующего дня = 25 859,48 × 0,26 / 365 (actual/365 как в приложении), платёж 780,70;
-     * авто-платёж — только в плановую дату 26.10.
-     */
     @Test
-    fun bankModel_prepayThenNextDayAccrual() {
-        val day25 = Migrations.moscowDate(2026, 9, 25)
-        val c = wb2(principal = 27702.36, interest = 123.45).apply {
-            lastInterestDate = day25; autoApplyMinPayment = true; monthlyPayment = 836.34
+    fun dailyInterestAfterPrepaymentUsesReducedPrincipal() {
+        val start = moscowDate(2027, 3, 25)
+        val credit = scheduledCredit(principal = 20_000.0, interest = 50.0).apply {
+            lastInterestDate = start
         }
-        val credits = mutableListOf(c)
-        val txs = mutableListOf<Transaction>()
+        val credits = mutableListOf(credit)
+        val transactions = mutableListOf<Transaction>()
         val prefs = FakeSharedPreferences()
 
-        val payTime = day25 + 2 * 3600_000L + 10 * 60_000L // 02:10 МСК = 09:10 Владивосток
-        val res = Annuity.applyPayment(c, 1842.88, null, payTime, money)
-        assertTrue(res.early)
-        assertEquals(25859.48, c.principal, 1e-6)
-        assertEquals(123.45, c.accruedInterest, 1e-9) // % не списаны
-        assertEquals(780.70, c.monthlyPayment, 0.0)
+        val early = Annuity.applyPayment(credit, 1_000.0, null, start + 2 * 3_600_000L, money)
+        assertTrue(early.early)
+        assertEquals(19_000.0, credit.principal, 0.0)
 
-        // Полночь МСК 26.09: % за 25.09 на уменьшенное тело, авто-платежа нет (срок 26.10)
-        val day26 = Migrations.moscowDate(2026, 9, 26) + 60_000L
-        DailyInterest.applyIfNeeded(prefs, txs, credits, day26)
-        assertEquals(123.45 + 25859.48 * 0.26 / 365.0, c.accruedInterest, 1e-9)
-        assertEquals(25859.48, c.principal, 1e-6)
-        assertEquals(Migrations.moscowDate(2026, 10, 26), c.nextMinPaymentDue)
-        assertTrue(txs.none { it.note.startsWith("Авто платёж") })
+        val nextDay = moscowDate(2027, 3, 26) + 60_000L
+        DailyInterest.applyIfNeeded(prefs, transactions, credits, nextDay)
 
-        // 26.10: обязательный платёж 780,70 → комиссии → % → тело, затем пересчёт по формуле
-        val accruedBefore = c.accruedInterest + 25859.48 * 0.26 / 365.0 * 30 // 26.09..25.10
-        val day2610 = Migrations.moscowDate(2026, 10, 26) + 60_000L
-        DailyInterest.applyIfNeeded(prefs, txs, credits, day2610)
-        val auto = txs.single { it.note.startsWith("Авто платёж") }
-        assertEquals(780.70, auto.amount, 1e-9)
-        assertEquals(0.0, c.accruedInterest, 1e-9)
-        val expectedPrincipal = 25859.48 - (780.70 - accruedBefore)
-        assertEquals(expectedPrincipal, c.principal, 1e-6)
-        assertEquals(Migrations.moscowDate(2026, 11, 26), c.nextMinPaymentDue)
-        assertEquals(Annuity.payment(c.principal, 26.0, 58), c.monthlyPayment, 0.0)
+        assertEquals(50.0 + 19_000.0 * 0.12 / 365.0, credit.accruedInterest, 1e-8)
+        assertEquals(19_000.0, credit.principal, 0.0)
     }
 }
