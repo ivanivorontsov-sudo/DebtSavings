@@ -30,6 +30,18 @@ class DebtPayoffPlannerTest {
     }
 
     @Test
+    fun avalancheDoesNotPrioritizeDebtThatIsInGraceOverAccruingDebt() {
+        val grace = credit("Grace 70%", 5000.0, 70.0, 100.0).copy(graceMode = true)
+        val accruing = credit("Accruing 18%", 4000.0, 18.0, 100.0)
+
+        val result = DebtPayoffPlanner.calculate(
+            listOf(grace, accruing), 50.0, DebtStrategy.AVALANCHE
+        )
+
+        assertEquals("Accruing 18%", result.priorityOrder.first())
+    }
+
+    @Test
     fun plannerDoesNotMutateStoredCreditObjects() {
         val debts = listOf(credit("A", 1000.0, 18.0, 75.0))
         val before = debts.first().copy()

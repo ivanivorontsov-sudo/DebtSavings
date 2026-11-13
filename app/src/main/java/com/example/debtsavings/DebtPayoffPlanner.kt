@@ -185,7 +185,7 @@ object DebtPayoffPlanner {
     private fun priority(rows: List<SimDebt>, strategy: DebtStrategy): List<SimDebt> =
         when (strategy) {
             DebtStrategy.AVALANCHE -> rows.sortedWith(
-                compareByDescending<SimDebt> { it.rate }
+                compareByDescending<SimDebt> { if (it.graceMode) ZERO else it.rate }
                     .thenBy { it.outstanding }
                     .thenBy { it.originalIndex }
             )
