@@ -2,7 +2,7 @@ name: Android tests
 
 on:
   push:
-    branches: [ main, 'release/**' ]
+    branches: [ main, 'release/**', 'feature/github-sync' ]
   workflow_dispatch:
 
 jobs:
