@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -9,7 +11,7 @@ val releaseKeystoreFile = layout.buildDirectory.file("release-signing/DebtSaving
 
 if (!releaseKeystoreBase64.isNullOrBlank()) {
     releaseKeystoreFile.parentFile.mkdirs()
-    releaseKeystoreFile.writeBytes(java.util.Base64.getDecoder().decode(releaseKeystoreBase64))
+    releaseKeystoreFile.writeBytes(Base64.getDecoder().decode(releaseKeystoreBase64))
 }
 
 android {
