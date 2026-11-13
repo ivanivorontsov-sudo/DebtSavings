@@ -24,12 +24,8 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           packages: 'platform-tools'
-      - name: Create Gradle Wrapper
-        run: gradle wrapper --gradle-version 8.2
       - name: Run unit tests
-        run: ./gradlew testDebugUnitTest --stacktrace
-      - name: Build installable debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: gradle --no-daemon testDebugUnitTest assembleDebug --stacktrace
       - name: Verify APK
         run: test -s app/build/outputs/apk/debug/app-debug.apk
       - name: Upload installable APK
