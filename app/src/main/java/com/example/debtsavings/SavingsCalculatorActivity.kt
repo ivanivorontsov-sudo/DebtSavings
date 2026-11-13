@@ -48,7 +48,7 @@ class SavingsCalculatorActivity : AppCompatActivity() {
             setPadding(0, dp(8), 0, dp(12))
         })
 
-        rateInput = addField(content, "Ставка накоплений, % годовых", prefs.getFloat("savings_rate", 0f).takeIf { it > 0f }?.toString().orEmpty())
+        rateInput = addField(content, "Ставка накоплений, % годовых", prefs.getFloat("savings_rate", 0f).toString())
         goalInput = addField(content, "Целевая сумма, ₽ (необязательно)", prefs.getFloat("savings_goal_target", 0f).takeIf { it > 0f }?.toString().orEmpty())
         contributionInput = addField(content, "Плановый взнос в месяц, ₽", prefs.getFloat("savings_monthly_contribution", 0f).takeIf { it > 0f }?.toString().orEmpty())
         expenseInput = addField(content, "Необходимые расходы в месяц, ₽", prefs.getFloat("monthly_essential_expenses", 0f).takeIf { it > 0f }?.toString().orEmpty())
@@ -81,7 +81,7 @@ class SavingsCalculatorActivity : AppCompatActivity() {
     private fun addField(parent: LinearLayout, hintText: String, value: String, decimal: Boolean = true): EditText {
         val input = EditText(this).apply {
             hint = hintText
-            inputType = InputType.TYPE_CLASS_NUMBER or if (decimal) InputType.TYPE_NUMBER_FLAG_DECIMAL else 0
+            inputType = InputType.TYPE_CLASS_NUMBER or (if (decimal) InputType.TYPE_NUMBER_FLAG_DECIMAL else 0)
             setSingleLine(true)
             setText(value)
             setPadding(dp(12), dp(8), dp(12), dp(8))

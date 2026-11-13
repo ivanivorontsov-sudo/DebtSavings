@@ -44,7 +44,7 @@ class DebtPlanActivity : AppCompatActivity() {
             hint = "Дополнительно в месяц, ₽"
             inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
             setSingleLine(true)
-            setText(prefs.getFloat("debt_plan_extra", 0f).takeIf { it > 0f }?.toString() ?: "")
+            setText(prefs.getFloat("debt_plan_extra", 0f).toString())
         }
         content.addView(extraInput, LinearLayout.LayoutParams(-1, -2))
 
