@@ -30,10 +30,35 @@ jobs:
           packages: 'platform-tools'
       - name: Create Gradle Wrapper
         run: gradle wrapper --gradle-version 8.2
+      - name: Validate permanent signing secrets
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+        shell: bash
+        run: |
+          if [[ -z "$RELEASE_KEYSTORE_BASE64" || -z "$RELEASE_KEYSTORE_PASSWORD" ]]; then
+            echo "::error::Add RELEASE_KEYSTORE_BASE64 and RELEASE_KEYSTORE_PASSWORD in Settings > Secrets and variables > Actions before building a release."
+            exit 1
+          fi
       - name: Build Release APK
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
         run: ./gradlew --no-daemon testDebugUnitTest assembleRelease --stacktrace
       - name: Verify Release APK
         run: test -s app/build/outputs/apk/release/app-release.apk
+      - name: Verify permanent signing certificate
+        shell: bash
+        run: |
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -n "$APKSIGNER"
+          CERT_SHA256="$("$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk | awk -F': ' '/certificate SHA-256 digest/ {print toupper($2); exit}' | tr -d ':[:space:]')"
+          EXPECTED_CERT_SHA256="F23944CF420BCE7FF90DD53E8E6972B0B4CE889723E78978173D1C7BFA7A3A2D"
+          if [[ "$CERT_SHA256" != "$EXPECTED_CERT_SHA256" ]]; then
+            echo "::error::The release APK was signed with an unexpected certificate."
+            exit 1
+          fi
+          echo "Подпись проверена: $CERT_SHA256" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload Release APK artifact
         uses: actions/upload-artifact@v4
         with:
@@ -47,13 +72,13 @@ jobs:
         run: |
           set -euo pipefail
           APK="$GITHUB_WORKSPACE/app/build/outputs/apk/release/app-release.apk"
-          OUT="$GITHUB_WORKSPACE/DebtSavings-1.2.0-release.apk"
+          OUT="$GITHUB_WORKSPACE/DebtSavings-1.3.0-release.apk"
           cp "$APK" "$OUT"
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
             TAG="$GITHUB_REF_NAME"
             PRERELEASE=false
           else
-            TAG="build-1.2.0-${GITHUB_RUN_NUMBER}"
+            TAG="build-1.3.0-${GITHUB_RUN_NUMBER}"
             PRERELEASE=true
           fi
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -61,6 +86,6 @@ jobs:
           else
             EXTRA=()
             if [ "$PRERELEASE" = true ]; then EXTRA+=(--prerelease); fi
-            gh release create "$TAG" "$OUT" --target "$GITHUB_SHA" --title "DebtSavings 1.2.0 ($TAG)" --notes "Сборка Android buildType=release (assembleRelease). Подпись CI: стандартный Android debug-keystore для установки и тестирования; для публикации в Google Play нужен собственный release-keystore." "${EXTRA[@]}"
+            gh release create "$TAG" "$OUT" --target "$GITHUB_SHA" --title "DebtSavings 1.3.0 ($TAG)" --notes "Сборка Android buildType=release (assembleRelease). Постоянная подпись DebtSavings; SHA-256 сертификата: F2:39:44:CF:42:0B:CE:7F:F9:0D:D5:3E:8E:69:72:B0:B4:CE:88:97:23:E7:89:78:17:3D:1C:7B:FA:7A:3A:2D." "${EXTRA[@]}"
           fi
           echo "Опубликован релиз: https://github.com/ivanivorontsov-sudo/DebtSavings/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"

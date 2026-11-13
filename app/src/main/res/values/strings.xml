@@ -26,4 +26,26 @@
     <string name="calendar_legend_credit">Кредит</string>
     <string name="calendar_legend_sub">Подписка</string>
     <string name="journal_full">На весь экран</string>
+
+    <string name="game_title">🎮 Путь к финансовой свободе</string>
+    <string name="game_level_format">Уровень %1$d: %2$s · %3$d XP</string>
+    <string name="game_next_level_format">До уровня «%1$s»: ещё %2$d XP</string>
+    <string name="game_max_level">Максимальный уровень достигнут</string>
+    <string name="game_week_mission_done">✅ Миссия недели выполнена: реальный платёж или пополнение уже отмечены. Новая миссия откроется в понедельник.</string>
+    <string name="game_week_mission_pending">Миссия недели: отметь один фактический платёж по кредиту или пополнение накоплений. Прогресс: 0/1. Сумма не влияет на очки.</string>
+    <string name="game_badges_empty">Достижения: первое откроется после первого учтённого платежа или пополнения.</string>
+    <string name="game_badges_format">Достижения: %1$s</string>
+    <string name="game_rules">25 XP за один день с реальным платежом или пополнением. Повторные операции в этот же день не дают дополнительных очков. Проценты и авто-записи не засчитываются; пропуски ничего не отнимают.</string>
+
+    <string name="notifications_title">Напоминания</string>
+    <string name="notifications_rationale">Напоминания помогают не пропустить срок платежа или продление подписки. В игровом сценарии они также помогают вернуться к финансовому плану. Разрешение можно отключить в любой момент в меню или настройках Android.</string>
+    <string name="notifications_allow">Разрешить</string>
+    <string name="notifications_later">Не сейчас</string>
+    <string name="notifications_enabled">Напоминания включены.</string>
+    <string name="notifications_disabled">Напоминания выключены.</string>
+    <string name="notifications_denied">Разрешение не выдано. Игровой сценарий продолжит работать без уведомлений.</string>
+    <string name="notifications_blocked_title">Уведомления заблокированы</string>
+    <string name="notifications_blocked_message">Разрешение больше нельзя запросить системным окном. Включите уведомления в настройках приложения Android.</string>
+    <string name="notifications_open_settings">Открыть настройки</string>
+    <string name="notifications_settings_error">Не удалось открыть настройки уведомлений.</string>
 </resources>

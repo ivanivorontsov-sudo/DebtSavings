@@ -3,6 +3,15 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val releaseKeystoreBase64 = System.getenv("RELEASE_KEYSTORE_BASE64")
+val releaseKeystorePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+val releaseKeystoreFile = layout.buildDirectory.file("release-signing/DebtSavings-release.jks").get().asFile
+
+if (!releaseKeystoreBase64.isNullOrBlank()) {
+    releaseKeystoreFile.parentFile.mkdirs()
+    releaseKeystoreFile.writeBytes(java.util.Base64.getDecoder().decode(releaseKeystoreBase64))
+}
+
 android {
     namespace = "com.example.debtsavings"
     compileSdk = 34
@@ -11,15 +20,24 @@ android {
         applicationId = "com.example.debtsavings"
         minSdk = 24
         targetSdk = 34
-        versionCode = 10
-        versionName = "1.2.0"
+        versionCode = 11
+        versionName = "1.3.0"
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = releaseKeystoreFile
+            storePassword = releaseKeystorePassword
+            keyAlias = "debtsavings"
+            keyPassword = releaseKeystorePassword
+        }
     }
 
     buildTypes {
         release {
-            // Release build variant, signed with the standard CI debug key so the APK is installable.
-            // Replace with a private release keystore before publishing to Google Play.
-            signingConfig = signingConfigs.getByName("debug")
+            // A single permanent private key is provided by GitHub Actions secrets.
+            // Never fall back to the ephemeral CI debug key for release APKs.
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

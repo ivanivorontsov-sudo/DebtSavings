@@ -7,10 +7,8 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import androidx.core.content.ContextCompat
 import java.util.Calendar
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
@@ -32,6 +30,10 @@ private const val MAX_DAYS = 3
  */
 object PaymentReminderScheduler {
     fun scheduleNext(context: Context) {
+        if (!NotificationPreferences.isEnabled(context)) {
+            cancel(context)
+            return
+        }
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val now = System.currentTimeMillis()
         val (trigger, hour) = nextSlot(now)
@@ -50,6 +52,21 @@ object PaymentReminderScheduler {
             alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pending)
         } else {
             alarmManager.set(AlarmManager.RTC_WAKEUP, trigger, pending)
+        }
+    }
+
+    fun cancel(context: Context) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(context, PaymentReminderReceiver::class.java).setAction(ACTION_PAYMENT_REMINDER)
+        val pending = PendingIntent.getBroadcast(
+            context,
+            REQUEST_CODE_PAY,
+            intent,
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        )
+        if (pending != null) {
+            alarmManager.cancel(pending)
+            pending.cancel()
         }
     }
 
@@ -94,6 +111,7 @@ class PaymentReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent?.action != ACTION_PAYMENT_REMINDER) return
         val slotHour = intent.getIntExtra("slotHour", PaymentReminderScheduler.currentSlotHour())
+        if (!NotificationPreferences.isEnabled(context)) return
         PaymentReminders.checkAndNotify(context, slotHour)
         // Early-day threshold check for subscriptions (day 7 etc.) still useful once per morning
         if (slotHour == SLOT_HOURS[0]) {
@@ -116,12 +134,7 @@ object PaymentReminders {
 
     fun checkAndNotify(context: Context, slotHour: Int = PaymentReminderScheduler.currentSlotHour()) {
         ensureChannel(context)
-        if (Build.VERSION.SDK_INT >= 33) {
-            val ok = ContextCompat.checkSelfPermission(
-                context, android.Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-            if (!ok) return
-        }
+        if (!NotificationPreferences.isEnabled(context)) return
 
         val prefs = context.getSharedPreferences(Persistence.PREFS_NAME, Context.MODE_PRIVATE)
         val credits = mutableListOf<Credit>()

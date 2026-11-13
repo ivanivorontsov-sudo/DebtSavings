@@ -7,10 +7,8 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import androidx.core.content.ContextCompat
 import java.util.concurrent.TimeUnit
 
 private const val ACTION_SUB_CHECK = "com.example.debtsavings.SUBSCRIPTION_CHECK"
@@ -20,6 +18,10 @@ private const val PREF_FIRED = "sub_notify_fired"
 
 object SubscriptionAlarmScheduler {
     fun scheduleNext(context: Context) {
+        if (!NotificationPreferences.isEnabled(context)) {
+            cancel(context)
+            return
+        }
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(context, SubscriptionAlarmReceiver::class.java).setAction(ACTION_SUB_CHECK)
         val pending = PendingIntent.getBroadcast(
@@ -39,11 +41,27 @@ object SubscriptionAlarmScheduler {
             alarmManager.set(AlarmManager.RTC_WAKEUP, trigger, pending)
         }
     }
+
+    fun cancel(context: Context) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(context, SubscriptionAlarmReceiver::class.java).setAction(ACTION_SUB_CHECK)
+        val pending = PendingIntent.getBroadcast(
+            context,
+            REQUEST_CODE_SUB,
+            intent,
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        )
+        if (pending != null) {
+            alarmManager.cancel(pending)
+            pending.cancel()
+        }
+    }
 }
 
 class SubscriptionAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent?.action != ACTION_SUB_CHECK) return
+        if (!NotificationPreferences.isEnabled(context)) return
         SubscriptionNotifier.checkAndNotify(context)
         SubscriptionAlarmScheduler.scheduleNext(context)
     }
@@ -62,12 +80,7 @@ object SubscriptionNotifier {
 
     fun checkAndNotify(context: Context) {
         ensureChannel(context)
-        if (Build.VERSION.SDK_INT >= 33) {
-            val ok = ContextCompat.checkSelfPermission(
-                context, android.Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-            if (!ok) return
-        }
+        if (!NotificationPreferences.isEnabled(context)) return
 
         val prefs = context.getSharedPreferences(Persistence.PREFS_NAME, Context.MODE_PRIVATE)
         val items = mutableListOf<Subscription>()

@@ -1,9 +1,13 @@
 package com.example.debtsavings
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
@@ -13,10 +17,13 @@ import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -91,6 +98,38 @@ class MainActivity : AppCompatActivity() {
     private val prefs by lazy { getSharedPreferences(Persistence.PREFS_NAME, Context.MODE_PRIVATE) }
     private val subscriptionsForBackup = mutableListOf<Subscription>()
 
+    private lateinit var gameScenarioCard: View
+    private lateinit var gameLevelText: TextView
+    private lateinit var gameLevelProgress: ProgressBar
+    private lateinit var gameProgressText: TextView
+    private lateinit var gameMissionText: TextView
+    private lateinit var gameBadgesText: TextView
+    private lateinit var gameRulesText: TextView
+
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            enableNotifications()
+        } else {
+            prefs.edit().putBoolean(NotificationPreferences.PREF_ENABLED, false).apply()
+            Toast.makeText(this, R.string.notifications_denied, Toast.LENGTH_LONG).show()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                !shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)
+            ) {
+                AlertDialog.Builder(this)
+                    .setTitle(R.string.notifications_blocked_title)
+                    .setMessage(R.string.notifications_blocked_message)
+                    .setPositiveButton(R.string.notifications_open_settings) { _, _ ->
+                        openNotificationSettings()
+                    }
+                    .setNegativeButton(R.string.notifications_later, null)
+                    .show()
+            }
+        }
+        invalidateOptionsMenu()
+    }
+
     private val exportLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri: Uri? ->
@@ -109,7 +148,9 @@ class MainActivity : AppCompatActivity() {
                     savingsMonthlyContribution = prefs.getFloat("savings_monthly_contribution", 0f),
                     monthlyEssentialExpenses = prefs.getFloat("monthly_essential_expenses", 0f),
                     emergencyMonths = prefs.getInt("emergency_months", 3),
-                    debtPlanExtra = prefs.getFloat("debt_plan_extra", 0f)
+                    debtPlanExtra = prefs.getFloat("debt_plan_extra", 0f),
+                    gameModeEnabled = prefs.getBoolean(GameScenario.PREF_ENABLED, false),
+                    notificationsEnabled = prefs.getBoolean(NotificationPreferences.PREF_ENABLED, true)
                 )
                 DataBackup.writeToStream(prefs, snap, out)
             } ?: throw IllegalStateException("Не удалось открыть файл")
@@ -173,6 +214,13 @@ class MainActivity : AppCompatActivity() {
         creditsTableBody = findViewById(R.id.creditsTableBody)
         textCreditsTotals = findViewById(R.id.textCreditsTotals)
         warningBanner = findViewById(R.id.warningBanner)
+        gameScenarioCard = findViewById(R.id.gameScenarioCard)
+        gameLevelText = findViewById(R.id.gameLevelText)
+        gameLevelProgress = findViewById(R.id.gameLevelProgress)
+        gameProgressText = findViewById(R.id.gameProgressText)
+        gameMissionText = findViewById(R.id.gameMissionText)
+        gameBadgesText = findViewById(R.id.gameBadgesText)
+        gameRulesText = findViewById(R.id.gameRulesText)
         recycler = findViewById(R.id.recyclerJournal)
         emptyJournal = findViewById(R.id.emptyJournal)
         journalScrollHint = findViewById(R.id.journalScrollHint)
@@ -207,6 +255,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        invalidateOptionsMenu()
         loadTransactions()
         loadCredits()
         applyDailyInterestIfNeeded()
@@ -223,8 +272,24 @@ class MainActivity : AppCompatActivity() {
         return true
     }
 
+    override fun onPrepareOptionsMenu(menu: android.view.Menu?): Boolean {
+        menu?.findItem(R.id.menu_game_mode)?.isChecked =
+            prefs.getBoolean(GameScenario.PREF_ENABLED, false)
+        menu?.findItem(R.id.menu_notifications)?.isChecked =
+            NotificationPreferences.isEnabled(this)
+        return super.onPrepareOptionsMenu(menu)
+    }
+
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
+            R.id.menu_game_mode -> {
+                toggleGameMode()
+                return true
+            }
+            R.id.menu_notifications -> {
+                toggleNotifications()
+                return true
+            }
             R.id.menu_debt_plan -> {
                 startActivity(Intent(this, DebtPlanActivity::class.java)); return true
             }
@@ -248,6 +313,121 @@ class MainActivity : AppCompatActivity() {
             }
         }
         return super.onOptionsItemSelected(item)
+    }
+
+    private fun toggleGameMode() {
+        val enabled = !prefs.getBoolean(GameScenario.PREF_ENABLED, false)
+        prefs.edit().putBoolean(GameScenario.PREF_ENABLED, enabled).apply()
+        invalidateOptionsMenu()
+        renderGameScenario()
+        if (enabled && !NotificationPreferences.isEnabled(this)) {
+            showNotificationsRationale()
+        }
+    }
+
+    private fun toggleNotifications() {
+        if (NotificationPreferences.isEnabled(this)) {
+            prefs.edit().putBoolean(NotificationPreferences.PREF_ENABLED, false).apply()
+            PaymentReminderScheduler.cancel(this)
+            SubscriptionAlarmScheduler.cancel(this)
+            NotificationManagerCompat.from(this).cancelAll()
+            Toast.makeText(this, R.string.notifications_disabled, Toast.LENGTH_SHORT).show()
+            invalidateOptionsMenu()
+        } else {
+            showNotificationsRationale()
+        }
+    }
+
+    private fun showNotificationsRationale() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.notifications_title)
+            .setMessage(R.string.notifications_rationale)
+            .setPositiveButton(R.string.notifications_allow) { _, _ ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    ContextCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.POST_NOTIFICATIONS
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    prefs.edit().putBoolean(NotificationPreferences.PREF_ENABLED, true).apply()
+                    if (NotificationManagerCompat.from(this).areNotificationsEnabled()) {
+                        enableNotifications()
+                    } else {
+                        openNotificationSettings()
+                    }
+                }
+            }
+            .setNegativeButton(R.string.notifications_later) { _, _ ->
+                prefs.edit().putBoolean(NotificationPreferences.PREF_ENABLED, false).apply()
+                invalidateOptionsMenu()
+            }
+            .show()
+    }
+
+    private fun enableNotifications() {
+        if (!NotificationPreferences.hasRuntimePermission(this)) {
+            showNotificationsRationale()
+            return
+        }
+        prefs.edit().putBoolean(NotificationPreferences.PREF_ENABLED, true).apply()
+        if (!NotificationManagerCompat.from(this).areNotificationsEnabled()) {
+            openNotificationSettings()
+            invalidateOptionsMenu()
+            return
+        }
+        PaymentReminderScheduler.scheduleNext(this)
+        SubscriptionAlarmScheduler.scheduleNext(this)
+        Toast.makeText(this, R.string.notifications_enabled, Toast.LENGTH_SHORT).show()
+        invalidateOptionsMenu()
+    }
+
+    private fun openNotificationSettings() {
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        } else {
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+        }
+        try {
+            startActivity(intent)
+        } catch (_: Exception) {
+            Toast.makeText(this, R.string.notifications_settings_error, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun renderGameScenario() {
+        if (!prefs.getBoolean(GameScenario.PREF_ENABLED, false)) {
+            gameScenarioCard.visibility = View.GONE
+            return
+        }
+
+        val progress = GameScenario.calculate(transactions)
+        gameScenarioCard.visibility = View.VISIBLE
+        gameLevelText.text = getString(
+            R.string.game_level_format,
+            progress.levelNumber,
+            progress.levelTitle,
+            progress.xp
+        )
+        gameLevelProgress.progress = progress.levelProgressPercent
+        gameProgressText.text = if (progress.nextLevelTitle != null) {
+            getString(R.string.game_next_level_format, progress.nextLevelTitle, progress.xpToNextLevel)
+        } else {
+            getString(R.string.game_max_level)
+        }
+        gameMissionText.text = if (progress.weeklyMissionDone) {
+            getString(R.string.game_week_mission_done)
+        } else {
+            getString(R.string.game_week_mission_pending)
+        }
+        gameBadgesText.text = if (progress.earnedBadges.isEmpty()) {
+            getString(R.string.game_badges_empty)
+        } else {
+            getString(R.string.game_badges_format, progress.earnedBadges.joinToString(" · "))
+        }
+        gameRulesText.text = getString(R.string.game_rules)
     }
 
     private fun setupCreditSpinner() {
@@ -365,6 +545,7 @@ class MainActivity : AppCompatActivity() {
         journalScrollHint.visibility = if (journalEmpty) View.VISIBLE else View.GONE
         recycler.visibility = if (journalEmpty) View.GONE else View.VISIBLE
         warningBanner.visibility = if (totalDebtBalance() >= 500000.0) View.VISIBLE else View.GONE
+        renderGameScenario()
     }
 
     private fun refreshPreview() {

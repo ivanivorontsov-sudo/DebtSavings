@@ -27,6 +27,18 @@
         android:icon="@android:drawable/ic_menu_agenda"
         app:showAsAction="never" />
     <item
+        android:id="@+id/menu_game_mode"
+        android:title="Игровой сценарий"
+        android:icon="@android:drawable/ic_media_play"
+        android:checkable="true"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/menu_notifications"
+        android:title="Напоминания"
+        android:icon="@android:drawable/ic_dialog_info"
+        android:checkable="true"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/menu_export"
         android:title="Экспорт…"
         android:icon="@android:drawable/ic_menu_upload"

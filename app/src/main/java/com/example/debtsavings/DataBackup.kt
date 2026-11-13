@@ -16,7 +16,7 @@ import java.util.TimeZone
  * exportVersion=2: credits, transactions, subscriptions + настройки накоплений и плана погашения.
  */
 object DataBackup {
-    const val EXPORT_VERSION = 2
+    const val EXPORT_VERSION = 3
     private val UTF8: Charset = Charsets.UTF_8
 
     data class Snapshot(
@@ -30,7 +30,9 @@ object DataBackup {
         val savingsMonthlyContribution: Float = 0f,
         val monthlyEssentialExpenses: Float = 0f,
         val emergencyMonths: Int = 3,
-        val debtPlanExtra: Float = 0f
+        val debtPlanExtra: Float = 0f,
+        val gameModeEnabled: Boolean = false,
+        val notificationsEnabled: Boolean = true
     )
 
     fun buildJson(prefs: SharedPreferences, snapshot: Snapshot): String {
@@ -72,6 +74,8 @@ object DataBackup {
             put("emergency_months", snapshot.emergencyMonths)
             put("debt_plan_extra", snapshot.debtPlanExtra.toDouble())
             put(Persistence.DEFAULTS_SEEDED_KEY, snapshot.defaultsSeeded)
+            put(GameScenario.PREF_ENABLED, snapshot.gameModeEnabled)
+            put(NotificationPreferences.PREF_ENABLED, snapshot.notificationsEnabled)
         })
         return root.toString(2)
     }
@@ -126,6 +130,8 @@ object DataBackup {
         val essentialExpenses = prefsObj.optDouble("monthly_essential_expenses", 0.0).toFloat()
         val emergencyMonths = prefsObj.optInt("emergency_months", 3).coerceIn(1, 24)
         val debtPlanExtra = prefsObj.optDouble("debt_plan_extra", 0.0).toFloat()
+        val gameModeEnabled = prefsObj.optBoolean(GameScenario.PREF_ENABLED, false)
+        val notificationsEnabled = prefsObj.optBoolean(NotificationPreferences.PREF_ENABLED, true)
         val seeded = prefsObj.optBoolean(Persistence.DEFAULTS_SEEDED_KEY, true)
 
         return Snapshot(
@@ -139,7 +145,9 @@ object DataBackup {
             savingsMonthlyContribution = monthlyContribution,
             monthlyEssentialExpenses = essentialExpenses,
             emergencyMonths = emergencyMonths,
-            debtPlanExtra = debtPlanExtra
+            debtPlanExtra = debtPlanExtra,
+            gameModeEnabled = gameModeEnabled,
+            notificationsEnabled = notificationsEnabled
         )
     }
 
@@ -156,6 +164,8 @@ object DataBackup {
             .putFloat("monthly_essential_expenses", snapshot.monthlyEssentialExpenses)
             .putInt("emergency_months", snapshot.emergencyMonths)
             .putFloat("debt_plan_extra", snapshot.debtPlanExtra)
+            .putBoolean(GameScenario.PREF_ENABLED, snapshot.gameModeEnabled)
+            .putBoolean(NotificationPreferences.PREF_ENABLED, snapshot.notificationsEnabled)
             .putBoolean(Persistence.DEFAULTS_SEEDED_KEY, snapshot.defaultsSeeded)
             .apply()
     }
