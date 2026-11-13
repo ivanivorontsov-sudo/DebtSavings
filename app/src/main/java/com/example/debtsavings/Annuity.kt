@@ -229,7 +229,13 @@ object Annuity {
             note.startsWith("Корректировка комиссий") || note.startsWith("Комиссии (старт)") -> {
                 credit.accruedFees = (credit.accruedFees + tx.amount).coerceAtLeast(0.0)
             }
-            tx.amount > 0 -> credit.principal += tx.amount
+            tx.amount > 0 && parsePaymentAllocation(note) != null -> {
+                val breakdown = parsePaymentAllocation(note)!!
+                credit.accruedFees = round2(credit.accruedFees + breakdown.fees)
+                credit.accruedInterest = round2(credit.accruedInterest + breakdown.interest)
+                credit.principal = round2(credit.principal + breakdown.principal)
+            }
+            tx.amount > 0 -> credit.principal = round2(credit.principal + tx.amount)
             else -> {
                 if (!note.startsWith("Проценты") && !note.startsWith("Комиссия")) {
                     credit.principal = (credit.principal + tx.amount).coerceAtLeast(0.0)
@@ -237,6 +243,30 @@ object Annuity {
             }
         }
         if (abs(credit.principal - oldPrincipal) > 0.001) recompute(credit, now)
+    }
+
+    /**
+     * Разбор распределения платежа из записи журнала. Нужен, чтобы отмена платежа
+     * восстанавливала тело, проценты и комиссии в те же поля, из которых они были списаны.
+     */
+    private fun parsePaymentAllocation(note: String): PaymentBreakdown? {
+        val source = note.substringAfter("Из платежа:", "")
+        if (source.isBlank()) return null
+
+        fun amount(label: String): Double {
+            val tail = source.substringAfter("$label ", "")
+            if (tail.isEmpty()) return 0.0
+            val raw = tail.substringBefore(" ₽")
+            val normalized = raw.filter { it.isDigit() || it == ',' || it == '.' }
+                .replace(',', '.')
+            return normalized.toDoubleOrNull() ?: 0.0
+        }
+
+        return PaymentBreakdown(
+            fees = amount("комиссии"),
+            interest = amount("%"),
+            principal = amount("тело")
+        )
     }
 
     private fun cal(millis: Long): Calendar {
