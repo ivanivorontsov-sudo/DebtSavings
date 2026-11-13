@@ -48,4 +48,4 @@
     <string name="notifications_blocked_message">Разрешение больше нельзя запросить системным окном. Включите уведомления в настройках приложения Android.</string>
     <string name="notifications_open_settings">Открыть настройки</string>
     <string name="notifications_settings_error">Не удалось открыть настройки уведомлений.</string>
-</resources>
+    <string name="github_sync_title">Синхронизация GitHub</string>\n</resources>
