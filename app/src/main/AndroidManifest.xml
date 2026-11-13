@@ -3,6 +3,7 @@
 
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".DebtSavingsApplication"
@@ -27,7 +28,7 @@
             android:name=".CreditCalculatorActivity"
             android:exported="false"
             android:parentActivityName=".MainActivity"
-            android:label="Калькулятор кредита" />
+            android:label="Мои кредиты" />
 
         <activity
             android:name=".SavingsCalculatorActivity"
@@ -35,8 +36,40 @@
             android:parentActivityName=".MainActivity"
             android:label="Накопительный счёт" />
 
+        <activity
+            android:name=".DebtPlanActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:label="План погашения" />
+
+        <activity
+            android:name=".SubscriptionsActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:label="Подписки" />
+
+        <activity
+            android:name=".CalendarActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:label="Календарь" />
+
+        <activity
+            android:name=".JournalActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:label="Все операции" />
+
         <receiver
             android:name=".InterestAlarmReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".SubscriptionAlarmReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".PaymentReminderReceiver"
             android:exported="false" />
 
         <receiver
@@ -52,5 +85,4 @@
         </receiver>
 
     </application>
-
 </manifest>
