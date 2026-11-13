@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.text.InputType
 import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
@@ -331,8 +332,8 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("GitHub · ${GitHubSyncSettings.repoName(this)}")
             .setMessage(
-                GitHubSyncSettings.status(this) + "\\n\\n" +
-                    "Автосинхронизация включается после изменений и дополнительно запускается раз в час.\\n" +
+                GitHubSyncSettings.status(this) + "\n\n" +
+                    "Автосинхронизация включается после изменений и дополнительно запускается раз в час.\n" +
                     "Облачная копия зашифрована AES-256-GCM. Пароль синхронизации нужен на каждом устройстве."
             )
             .setItems(options) { _, which ->
