@@ -20,4 +20,12 @@
 
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <color name="cal_credit">#FFC62828</color>
+    <color name="cal_subscription">#FF1565C0</color>
+    <color name="cal_today_bg">#1A2E7D6F</color>
+    <color name="cal_selected_bg">#332E7D6F</color>
+    <color name="cal_dot_both">#FF6A1B9A</color>
+    <color name="chart_bar">#FF2E7D6F</color>
+    <color name="chart_bar_alt">#FF1565C0</color>
 </resources>

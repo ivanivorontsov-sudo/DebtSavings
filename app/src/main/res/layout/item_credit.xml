@@ -47,7 +47,6 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 app:tint="@color/text_tertiary"
                 android:contentDescription="Удалить" />
-
         </LinearLayout>
 
         <TextView
@@ -67,6 +66,17 @@
             android:textColor="@color/debt_red"
             android:layout_marginTop="8dp" />
 
+        <TextView
+            android:id="@+id/creditMinPayment"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:textColor="@color/text_secondary"
+            android:layout_marginTop="6dp"
+            android:lineSpacingExtra="2dp"
+            android:background="@color/background"
+            android:padding="10dp" />
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnPayCredit"
             style="@style/Widget.Material3.Button.TonalButton"
@@ -75,7 +85,5 @@
             android:layout_marginTop="12dp"
             android:text="Внести платёж"
             app:cornerRadius="10dp" />
-
     </LinearLayout>
-
 </com.google.android.material.card.MaterialCardView>

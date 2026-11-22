@@ -2,6 +2,11 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <item
+        android:id="@+id/menu_calendar"
+        android:title="@string/calendar_title"
+        android:icon="@android:drawable/ic_menu_my_calendar"
+        app:showAsAction="ifRoom" />
+    <item
         android:id="@+id/menu_credit"
         android:title="@string/credit_calc"
         android:icon="@android:drawable/ic_menu_sort_by_size"
@@ -10,5 +15,20 @@
         android:id="@+id/menu_savings"
         android:title="Накопительный счёт"
         android:icon="@android:drawable/ic_menu_save"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/menu_subscriptions"
+        android:title="Подписки"
+        android:icon="@android:drawable/ic_menu_agenda"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/menu_export"
+        android:title="Экспорт…"
+        android:icon="@android:drawable/ic_menu_upload"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/menu_import"
+        android:title="Импорт…"
+        android:icon="@android:drawable/ic_menu_revert"
         app:showAsAction="never" />
 </menu>

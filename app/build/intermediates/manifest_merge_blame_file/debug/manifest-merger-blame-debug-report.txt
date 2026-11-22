@@ -1,0 +1,206 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.example.debtsavings"
+4    android:versionCode="2"
+5    android:versionName="1.1" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="24"
+9        android:targetSdkVersion="34" />
+10
+11    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+11-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:4:5-81
+11-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:4:22-78
+12    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+12-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:5:5-79
+12-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:5:22-76
+13    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+13-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:6:5-77
+13-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:6:22-74
+14
+15    <permission
+15-->[androidx.core:core:1.12.0] /home/box/.gradle/caches/transforms-3/d1e4a685b1001794fbcfe4ee9c157a7e/transformed/core-1.12.0/AndroidManifest.xml:22:5-24:47
+16        android:name="com.example.debtsavings.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+16-->[androidx.core:core:1.12.0] /home/box/.gradle/caches/transforms-3/d1e4a685b1001794fbcfe4ee9c157a7e/transformed/core-1.12.0/AndroidManifest.xml:23:9-81
+17        android:protectionLevel="signature" />
+17-->[androidx.core:core:1.12.0] /home/box/.gradle/caches/transforms-3/d1e4a685b1001794fbcfe4ee9c157a7e/transformed/core-1.12.0/AndroidManifest.xml:24:9-44
+18
+19    <uses-permission android:name="com.example.debtsavings.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+19-->[androidx.core:core:1.12.0] /home/box/.gradle/caches/transforms-3/d1e4a685b1001794fbcfe4ee9c157a7e/transformed/core-1.12.0/AndroidManifest.xml:26:5-97
+19-->[androidx.core:core:1.12.0] /home/box/.gradle/caches/transforms-3/d1e4a685b1001794fbcfe4ee9c157a7e/transformed/core-1.12.0/AndroidManifest.xml:26:22-94
+20
+21    <application
+21-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:8:5-65:19
+22        android:name="com.example.debtsavings.DebtSavingsApplication"
+22-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:9:9-47
+23        android:allowBackup="true"
+23-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:10:9-35
+24        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+24-->[androidx.core:core:1.12.0] /home/box/.gradle/caches/transforms-3/d1e4a685b1001794fbcfe4ee9c157a7e/transformed/core-1.12.0/AndroidManifest.xml:28:18-86
+25        android:debuggable="true"
+26        android:extractNativeLibs="false"
+27        android:icon="@mipmap/ic_launcher"
+27-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:11:9-43
+28        android:label="@string/app_name"
+28-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:12:9-41
+29        android:roundIcon="@mipmap/ic_launcher_round"
+29-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:13:9-54
+30        android:supportsRtl="true"
+30-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:14:9-35
+31        android:theme="@style/Theme.DebtSavings" >
+31-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:15:9-49
+32        <activity
+32-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:17:9-25:20
+33            android:name="com.example.debtsavings.MainActivity"
+33-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:18:13-41
+34            android:exported="true"
+34-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:19:13-36
+35            android:windowSoftInputMode="adjustResize" >
+35-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:20:13-55
+36            <intent-filter>
+36-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:21:13-24:29
+37                <action android:name="android.intent.action.MAIN" />
+37-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:22:17-69
+37-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:22:25-66
+38
+39                <category android:name="android.intent.category.LAUNCHER" />
+39-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:23:17-77
+39-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:23:27-74
+40            </intent-filter>
+41        </activity>
+42        <activity
+42-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:27:9-31:43
+43            android:name="com.example.debtsavings.CreditCalculatorActivity"
+43-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:28:13-53
+44            android:exported="false"
+44-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:29:13-37
+45            android:label="Мои кредиты"
+45-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:31:13-40
+46            android:parentActivityName="com.example.debtsavings.MainActivity" />
+46-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:30:13-55
+47        <activity
+47-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:33:9-37:50
+48            android:name="com.example.debtsavings.SavingsCalculatorActivity"
+48-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:34:13-54
+49            android:exported="false"
+49-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:35:13-37
+50            android:label="Накопительный счёт"
+50-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:37:13-47
+51            android:parentActivityName="com.example.debtsavings.MainActivity" />
+51-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:36:13-55
+52        <activity
+52-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:39:9-43:40
+53            android:name="com.example.debtsavings.SubscriptionsActivity"
+53-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:40:13-50
+54            android:exported="false"
+54-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:41:13-37
+55            android:label="Подписки"
+55-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:43:13-37
+56            android:parentActivityName="com.example.debtsavings.MainActivity" />
+56-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:42:13-55
+57
+58        <receiver
+58-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:45:9-47:40
+59            android:name="com.example.debtsavings.InterestAlarmReceiver"
+59-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:46:13-50
+60            android:exported="false" />
+60-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:47:13-37
+61        <receiver
+61-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:49:9-51:40
+62            android:name="com.example.debtsavings.SubscriptionAlarmReceiver"
+62-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:50:13-54
+63            android:exported="false" />
+63-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:51:13-37
+64        <receiver
+64-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:53:9-63:20
+65            android:name="com.example.debtsavings.InterestBootReceiver"
+65-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:54:13-49
+66            android:enabled="true"
+66-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:55:13-35
+67            android:exported="true" >
+67-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:56:13-36
+68            <intent-filter>
+68-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:57:13-62:29
+69                <action android:name="android.intent.action.BOOT_COMPLETED" />
+69-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:58:17-79
+69-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:58:25-76
+70                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+70-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:59:17-84
+70-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:59:25-81
+71                <action android:name="android.intent.action.TIME_SET" />
+71-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:60:17-73
+71-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:60:25-70
+72                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+72-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:61:17-81
+72-->/workspace/DebtSavings/app/src/main/AndroidManifest.xml:61:25-78
+73            </intent-filter>
+74        </receiver>
+75
+76        <provider
+76-->[androidx.emoji2:emoji2:1.2.0] /home/box/.gradle/caches/transforms-3/9dba3473c2e7ab91e493b9371a42d8d3/transformed/emoji2-1.2.0/AndroidManifest.xml:24:9-32:20
+77            android:name="androidx.startup.InitializationProvider"
+77-->[androidx.emoji2:emoji2:1.2.0] /home/box/.gradle/caches/transforms-3/9dba3473c2e7ab91e493b9371a42d8d3/transformed/emoji2-1.2.0/AndroidManifest.xml:25:13-67
+78            android:authorities="com.example.debtsavings.androidx-startup"
+78-->[androidx.emoji2:emoji2:1.2.0] /home/box/.gradle/caches/transforms-3/9dba3473c2e7ab91e493b9371a42d8d3/transformed/emoji2-1.2.0/AndroidManifest.xml:26:13-68
+79            android:exported="false" >
+79-->[androidx.emoji2:emoji2:1.2.0] /home/box/.gradle/caches/transforms-3/9dba3473c2e7ab91e493b9371a42d8d3/transformed/emoji2-1.2.0/AndroidManifest.xml:27:13-37
+80            <meta-data
+80-->[androidx.emoji2:emoji2:1.2.0] /home/box/.gradle/caches/transforms-3/9dba3473c2e7ab91e493b9371a42d8d3/transformed/emoji2-1.2.0/AndroidManifest.xml:29:13-31:52
+81                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+81-->[androidx.emoji2:emoji2:1.2.0] /home/box/.gradle/caches/transforms-3/9dba3473c2e7ab91e493b9371a42d8d3/transformed/emoji2-1.2.0/AndroidManifest.xml:30:17-75
+82                android:value="androidx.startup" />
+82-->[androidx.emoji2:emoji2:1.2.0] /home/box/.gradle/caches/transforms-3/9dba3473c2e7ab91e493b9371a42d8d3/transformed/emoji2-1.2.0/AndroidManifest.xml:31:17-49
+83            <meta-data
+83-->[androidx.lifecycle:lifecycle-process:2.6.1] /home/box/.gradle/caches/transforms-3/f96262b739e7235dd07a97d871a1b1da/transformed/lifecycle-process-2.6.1/AndroidManifest.xml:29:13-31:52
+84                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+84-->[androidx.lifecycle:lifecycle-process:2.6.1] /home/box/.gradle/caches/transforms-3/f96262b739e7235dd07a97d871a1b1da/transformed/lifecycle-process-2.6.1/AndroidManifest.xml:30:17-78
+85                android:value="androidx.startup" />
+85-->[androidx.lifecycle:lifecycle-process:2.6.1] /home/box/.gradle/caches/transforms-3/f96262b739e7235dd07a97d871a1b1da/transformed/lifecycle-process-2.6.1/AndroidManifest.xml:31:17-49
+86            <meta-data
+86-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:29:13-31:52
+87                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+87-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:30:17-85
+88                android:value="androidx.startup" />
+88-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:31:17-49
+89        </provider>
+90
+91        <receiver
+91-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:34:9-52:20
+92            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+92-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:35:13-76
+93            android:directBootAware="false"
+93-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:36:13-44
+94            android:enabled="true"
+94-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:37:13-35
+95            android:exported="true"
+95-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:38:13-36
+96            android:permission="android.permission.DUMP" >
+96-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:39:13-57
+97            <intent-filter>
+97-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:40:13-42:29
+98                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+98-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:41:17-91
+98-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:41:25-88
+99            </intent-filter>
+100            <intent-filter>
+100-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:43:13-45:29
+101                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+101-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:44:17-85
+101-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:44:25-82
+102            </intent-filter>
+103            <intent-filter>
+103-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:46:13-48:29
+104                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+104-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:47:17-88
+104-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:47:25-85
+105            </intent-filter>
+106            <intent-filter>
+106-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:49:13-51:29
+107                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+107-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:50:17-95
+107-->[androidx.profileinstaller:profileinstaller:1.3.0] /home/box/.gradle/caches/transforms-3/ee77c6148e535550acd02ec4a55fcb7f/transformed/profileinstaller-1.3.0/AndroidManifest.xml:50:25-92
+108            </intent-filter>
+109        </receiver>
+110    </application>
+111
+112</manifest>
